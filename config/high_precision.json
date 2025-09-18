@@ -1,0 +1,24 @@
+{
+  "description": "高精度转换配置 - 适用于需要精确几何的场景",
+  "geometry_tolerance": 0.1,
+  "min_road_length": 5.0,
+  "default_lane_width": 3.5,
+  "default_num_lanes": 1,
+  "default_speed_limit": 50,
+  "use_arc_fitting": true,
+  "coordinate_precision": 5,
+  "attribute_mapping": {
+    "WIDTH": "lane_width",
+    "LANES": "num_lanes",
+    "SPEED": "speed_limit",
+    "TYPE": "road_type",
+    "NAME": "road_name",
+    "SURFACE": "surface_type"
+  },
+  "notes": [
+    "使用0.1米的几何容差，适合高精度应用",
+    "启用圆弧拟合，更好地处理曲线道路",
+    "5位小数精度，适合厘米级精度要求",
+    "最小道路长度5米，保留更多短道路"
+  ]
+}

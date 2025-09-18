@@ -1,0 +1,38 @@
+{
+  "description": "城市道路转换配置 - 针对城市道路网络优化",
+  "geometry_tolerance": 1.0,
+  "min_road_length": 10.0,
+  "default_lane_width": 3.0,
+  "default_num_lanes": 2,
+  "default_speed_limit": 40,
+  "use_arc_fitting": true,
+  "coordinate_precision": 3,
+  "road_settings": {
+    "default_road_type": "urban",
+    "bidirectional_default": true,
+    "intersection_handling": true,
+    "traffic_signals": true
+  },
+  "attribute_mapping": {
+    "WIDTH": "lane_width",
+    "LANES": "num_lanes",
+    "SPEED": "speed_limit",
+    "TYPE": "road_type",
+    "NAME": "road_name",
+    "ONEWAY": "bidirectional",
+    "SURFACE": "surface_type",
+    "CLASS": "road_class"
+  },
+  "lane_settings": {
+    "sidewalk_width": 1.5,
+    "parking_lane_width": 2.5,
+    "bike_lane_width": 1.5
+  },
+  "notes": [
+    "针对城市道路网络设计",
+    "默认双向2车道，限速40km/h",
+    "启用圆弧拟合处理转弯和环岛",
+    "支持单行道属性映射",
+    "包含人行道和自行车道设置"
+  ]
+}

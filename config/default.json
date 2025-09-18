@@ -1,0 +1,17 @@
+{
+  "description": "默认转换配置",
+  "geometry_tolerance": 1.0,
+  "min_road_length": 10.0,
+  "default_lane_width": 3.5,
+  "default_num_lanes": 1,
+  "default_speed_limit": 50,
+  "use_arc_fitting": false,
+  "coordinate_precision": 3,
+  "attribute_mapping": {
+    "WIDTH": "lane_width",
+    "LANES": "num_lanes",
+    "SPEED": "speed_limit",
+    "TYPE": "road_type",
+    "NAME": "road_name"
+  }
+}

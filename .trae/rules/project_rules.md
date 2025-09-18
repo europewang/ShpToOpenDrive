@@ -1,0 +1,5 @@
+本脚本是创建在windows中
+conda环境是shp2opendrive，每次记得进入
+本代码所在路径为：E:\Code\ShpToOpenDrive
+修改或者新增新的类或者方法之后，将其写入API的md文档中
+实时更新Readme.md文件

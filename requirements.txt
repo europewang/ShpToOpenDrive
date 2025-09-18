@@ -1,0 +1,18 @@
+# 核心依赖
+scenariogeneration>=0.15.0  # 用于生成OpenDrive文件
+geopandas>=0.14.0          # 用于读取shapefile
+pyshp>=2.3.1               # shapefile处理
+shapely>=2.0.0             # 几何计算
+numpy>=1.24.0              # 数值计算
+scipy>=1.10.0              # 科学计算（曲线拟合）
+lxml>=4.9.0                # XML处理
+
+# 可选依赖
+matplotlib>=3.7.0          # 可视化（用于调试）
+folium>=0.14.0             # 地图可视化
+jupyter>=1.0.0             # 开发和测试
+
+# 开发依赖
+pytest>=7.0.0              # 测试框架
+black>=23.0.0              # 代码格式化
+flake8>=6.0.0              # 代码检查
