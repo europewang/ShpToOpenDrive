@@ -628,6 +628,15 @@ main()
 python -m src.main input.shp output.xodr --tolerance 0.5 --use-arcs --report report.json
 ```
 
+**命令行快速转换示例:**
+```bash
+# 使用默认配置转换
+python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/example_config.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/CenterLane.shp', 'output/CenterLane.xodr'); print('转换成功!' if result else '转换失败!')"
+
+# 使用高精度配置转换
+python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/high_precision.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/sample_roads.shp', 'output/sample_roads.xodr'); print('转换成功!' if result else '转换失败!')"
+```
+
 ---
 
 ## 使用指南
@@ -702,11 +711,115 @@ if stats['warnings']:
 
 ---
 
+## 5. xodr_parser.py - OpenDrive 解析模块
+
+### 模块说明
+负责解析 OpenDrive (.xodr) 格式文件，提取道路几何信息并转换为可视化数据。
+
+### XODRParser 类
+
+#### 构造函数
+```python
+__init__(self)
+```
+**功能:** 初始化 OpenDrive 解析器
+
+#### 主要方法
+
+##### parse_file()
+```python
+parse_file(self, file_path: str) -> Dict
+```
+**参数:**
+- `file_path` (str): XODR 文件路径
+
+**返回值:** Dict - 包含头部信息、道路数据和交叉口信息的字典
+
+**功能:** 解析 OpenDrive 文件并提取所有结构化数据
+
+**异常处理:**
+- XML 解析错误时抛出 ValueError
+- 文件读取失败时抛出相应异常
+
+##### get_road_center_lines()
+```python
+get_road_center_lines(self, resolution: float = 1.0) -> Dict[str, Dict]
+```
+**参数:**
+- `resolution` (float): 采样分辨率（米），默认 1.0
+
+**返回值:** Dict[str, Dict] - 道路中心线字典，键为道路ID，值包含坐标和长度信息
+
+**功能:** 生成所有道路的中心线点序列，用于 3D 可视化
+
+##### get_statistics()
+```python
+get_statistics(self) -> Dict
+```
+**返回值:** Dict - 包含道路数量、总长度、几何类型等统计信息
+
+**功能:** 获取解析后的统计信息
+
+##### generate_road_points()
+```python
+generate_road_points(self, road_data: Dict, resolution: float = 1.0) -> List[Tuple[float, float, float]]
+```
+**参数:**
+- `road_data` (Dict): 道路数据
+- `resolution` (float): 采样分辨率（米）
+
+**返回值:** List[Tuple[float, float, float]] - 3D 点列表
+
+**功能:** 根据道路几何生成 3D 点序列
+
+---
+
+## Web API 接口
+
+### /api/upload_xodr
+**方法:** POST
+**功能:** 上传 OpenDrive 文件并转换为 GeoJSON 格式
+
+**请求参数:**
+- `files`: 文件列表，必须包含 .xodr 格式文件
+
+**响应格式:**
+```json
+{
+  "success": true,
+  "message": "成功上传并加载 N 条道路",
+  "data": {
+    "type": "FeatureCollection",
+    "features": [...],
+    "metadata": {
+      "center": [x, y, z],
+      "bounds": {...},
+      "feature_count": N,
+      "has_z_coordinate": true
+    }
+  },
+  "filename": "example.xodr",
+  "upload_dir": "/tmp/..."
+}
+```
+
+---
+
+## 最近更新
+
+### 2025年1月 - v1.1.0
+- **新增功能**: 添加 OpenDrive 文件解析和可视化支持
+- **修复问题**: 修复 `get_road_center_lines()` 方法返回格式不匹配导致的 metadata 访问错误
+- **改进**: 统一 Shapefile 和 OpenDrive 文件的处理流程
+- **Web界面**: 支持混合文件格式上传，自动识别文件类型
+
+---
+
 ## 版本信息
 
-- **版本**: 1.0.0
+- **版本**: 1.1.0
 - **Python 要求**: >= 3.7
-- **主要依赖**: geopandas, shapely, scenariogeneration, numpy
+- **主要依赖**: geopandas, shapely, scenariogeneration, numpy, flask
 
 ---
 

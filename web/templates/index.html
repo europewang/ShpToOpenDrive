@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShpToOpenDrive - Web3D可视化</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Three.js库 -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="app">
+        <!-- 头部导航 -->
+        <header class="header">
+            <h1>ShpToOpenDrive - Web3D可视化</h1>
+            <div class="controls">
+                <button id="loadSampleBtn" class="btn btn-primary">加载示例文件</button>
+                <input type="file" id="fileInput" accept=".shp,.shx,.dbf,.prj,.cpg,.sbn,.sbx,.xodr" multiple style="display: none;">
+                <button id="loadFileBtn" class="btn btn-secondary">上传文件</button>
+                <button id="resetViewBtn" class="btn btn-info">重置视角</button>
+                <div class="export-group">
+                    <button id="exportXodrBtn" class="btn btn-success">导出XODR</button>
+                    <button id="exportShpBtn" class="btn btn-success">导出SHP</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主要内容区域 -->
+        <main class="main-content">
+            <!-- 侧边栏 -->
+            <aside class="sidebar">
+                <div class="panel">
+                    <h3>文件信息</h3>
+                    <div id="fileInfo">
+                        <p>未加载文件</p>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>统计信息</h3>
+                    <div id="stats">
+                        <p>道路数量: <span id="roadCount">0</span></p>
+                        <p>点数量: <span id="pointCount">0</span></p>
+                        <p>渲染时间: <span id="renderTime">0ms</span></p>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>显示设置</h3>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="showGrid" checked> 显示网格
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="showAxes" checked> 显示坐标轴
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <label>线条宽度:</label>
+                        <input type="range" id="lineWidth" min="1" max="10" value="2">
+                        <span id="lineWidthValue">2</span>
+                    </div>
+                    <div class="setting-group">
+                        <label>线条颜色:</label>
+                        <input type="color" id="lineColor" value="#000000">
+                    </div>
+                </div>
+
+
+            </aside>
+
+            <!-- 3D视图区域 -->
+            <div class="viewer-container">
+                <div id="viewer" class="viewer"></div>
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>加载中...</p>
+                </div>
+                <div id="error" class="error" style="display: none;"></div>
+                
+                <!-- 操作说明面板 -->
+                <div id="controlsHelp" class="controls-help">
+                    <h4>操作说明</h4>
+                    <div class="controls-rows">
+                        <!-- 键盘操作行 -->
+                        <div class="controls-row keyboard-controls">
+                            <div class="control-item">
+                                <span class="key">W</span>
+                                <span class="action">前进</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">S</span>
+                                <span class="action">后退</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">A</span>
+                                <span class="action">左移</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">D</span>
+                                <span class="action">右移</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">Q</span>
+                                <span class="action">上升</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">E</span>
+                                <span class="action">下降</span>
+                            </div>
+                        </div>
+                        <!-- 鼠标操作行 -->
+                        <div class="controls-row mouse-controls">
+                            <div class="control-item">
+                                <span class="key">鼠标左键</span>
+                                <span class="action">选择线条</span>
+                            </div>
+
+                            <div class="control-item">
+                                <span class="key">鼠标右键</span>
+                                <span class="action">旋转视角</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">滚轮</span>
+                                <span class="action">缩放</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 状态栏 -->
+        <footer class="status-bar">
+            <span id="status">就绪</span>
+            <span id="coordinates">坐标: (0, 0, 0)</span>
+        </footer>
+    </div>
+
+    <!-- 模态对话框 -->
+    <div id="modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">标题</h2>
+            <div id="modalBody">内容</div>
+            <div class="modal-footer">
+                <button id="modalOk" class="btn btn-primary">确定</button>
+                <button id="modalCancel" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出选项弹窗 -->
+    <div id="exportModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" id="exportModalClose">&times;</span>
+            <h2 id="exportModalTitle">导出选项</h2>
+            <div id="exportModalBody">
+                <div class="export-options">
+                    <div class="option-group">
+                        <h4>文件信息</h4>
+                        <div class="form-group">
+                            <label for="exportFileName">文件名:</label>
+                            <input type="text" id="exportFileName" class="form-control" placeholder="输入文件名">
+                        </div>
+                    </div>
+                    
+                    <div class="option-group">
+                        <h4>坐标系设置</h4>
+                        <div class="form-group">
+                            <label for="exportCRS">坐标参考系统:</label>
+                            <select id="exportCRS" class="form-control">
+                                <option value="EPSG:4326">WGS84 (EPSG:4326)</option>
+                                <option value="EPSG:3857">Web Mercator (EPSG:3857)</option>
+                                <option value="EPSG:2154">RGF93 / Lambert-93 (EPSG:2154)</option>
+                                <option value="EPSG:32633">WGS84 / UTM zone 33N (EPSG:32633)</option>
+                                <option value="custom">自定义...</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="customCRSGroup" style="display: none;">
+                            <label for="customCRS">自定义CRS:</label>
+                            <input type="text" id="customCRS" class="form-control" placeholder="输入EPSG代码或PROJ字符串">
+                        </div>
+                    </div>
+                    
+                    <div class="option-group" id="shpOptions" style="display: none;">
+                        <h4>Shapefile选项</h4>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="includeAttributes" checked>
+                                包含属性信息
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="geometryType">几何类型:</label>
+                            <select id="geometryType" class="form-control">
+                                <option value="LineString">线串 (LineString)</option>
+                                <option value="Point">点 (Point)</option>
+                                <option value="Polygon">多边形 (Polygon)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="option-group" id="xodrOptions" style="display: none;">
+                        <h4>OpenDRIVE选项</h4>
+                        <div class="form-group">
+                            <label for="xodrVersion">OpenDRIVE版本:</label>
+                            <select id="xodrVersion" class="form-control">
+                                <option value="1.7">1.7</option>
+                                <option value="1.6">1.6</option>
+                                <option value="1.5">1.5</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="roadWidth">默认道路宽度 (米):</label>
+                            <input type="number" id="roadWidth" class="form-control" value="3.5" min="1" max="20" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="laneCount">车道数量:</label>
+                            <input type="number" id="laneCount" class="form-control" value="2" min="1" max="8">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="includeElevation">
+                                包含高程信息
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="exportConfirmBtn" class="btn btn-primary">开始导出</button>
+                <button id="exportCancelBtn" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/js/web3d-viewer.js"></script>
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>

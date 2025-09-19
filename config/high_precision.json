@@ -1,11 +1,13 @@
 {
   "description": "高精度转换配置 - 适用于需要精确几何的场景",
   "geometry_tolerance": 0.1,
-  "min_road_length": 5.0,
+  "min_road_length": 0.5,
   "default_lane_width": 3.5,
   "default_num_lanes": 1,
   "default_speed_limit": 50,
-  "use_arc_fitting": true,
+  "use_arc_fitting": false,
+  "use_smooth_curves": true,
+  "preserve_detail": true,
   "coordinate_precision": 5,
   "attribute_mapping": {
     "WIDTH": "lane_width",

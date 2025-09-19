@@ -11,6 +11,8 @@ from shapely.geometry import LineString, Point
 from typing import List, Tuple, Dict, Optional
 import math
 import logging
+from scipy import interpolate
+from scipy.optimize import minimize_scalar
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +23,24 @@ class GeometryConverter:
     将shapefile的线性几何转换为OpenDrive的参数化几何描述。
     """
     
-    def __init__(self, tolerance: float = 1.0):
+    def __init__(self, tolerance: float = 1.0, smooth_curves: bool = True, preserve_detail: bool = True):
         """初始化转换器
         
         Args:
             tolerance: 几何拟合容差（米）
+            smooth_curves: 是否启用平滑曲线拟合
+            preserve_detail: 是否保留更多细节（减少简化）
         """
         self.tolerance = tolerance
+        self.smooth_curves = smooth_curves
+        self.preserve_detail = preserve_detail
+        # 如果启用细节保留，使用更小的容差
+        if preserve_detail:
+            self.effective_tolerance = tolerance * 0.3
+        else:
+            self.effective_tolerance = tolerance
         self.road_segments = []
+        logger.info(f"几何转换器初始化，容差: {tolerance}m, 平滑曲线: {smooth_curves}, 保留细节: {preserve_detail}")
     
     def convert_road_geometry(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
         """转换道路几何为OpenDrive格式
@@ -43,37 +55,355 @@ class GeometryConverter:
             logger.warning("坐标点数量不足，无法转换")
             return []
         
-        segments = []
-        current_s = 0.0  # 沿道路的累积距离
+        # 根据配置选择转换方法
+        if self.smooth_curves and len(coordinates) >= 3:
+            # 使用平滑曲线拟合
+            return self.fit_smooth_curve_segments(coordinates)
+        else:
+            # 使用传统的直线段拟合
+            return self.fit_line_segments(coordinates)
+    
+    def fit_smooth_curve_segments(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
+        """使用样条插值拟合平滑曲线段
         
-        # 简化处理：将每段都作为直线处理
-        for i in range(len(coordinates) - 1):
-            start_point = coordinates[i]
-            end_point = coordinates[i + 1]
+        Args:
+            coordinates: 坐标点列表
             
-            # 计算线段参数
-            dx = end_point[0] - start_point[0]
-            dy = end_point[1] - start_point[1]
-            length = math.sqrt(dx**2 + dy**2)
+        Returns:
+            List[Dict]: 平滑曲线段列表
+        """
+        if len(coordinates) < 3:
+            return self.fit_line_segments(coordinates)
+        
+        segments = []
+        current_s = 0.0
+        
+        # 使用改进的Douglas-Peucker算法，保留更多细节
+        if self.preserve_detail:
+            simplified_coords = self._adaptive_simplify(coordinates)
+        else:
+            simplified_coords = self._douglas_peucker(coordinates, self.effective_tolerance)
+        
+        # 如果启用平滑曲线，使用样条插值
+        if self.smooth_curves and len(simplified_coords) >= 4:
+            smooth_coords = self._spline_interpolation(simplified_coords)
+            segments = self._fit_curve_segments_from_smooth(smooth_coords, current_s)
+        else:
+            # 使用改进的直线段拟合
+            segments = self._fit_adaptive_line_segments(simplified_coords, current_s)
+        
+        return segments
+    
+    def _adaptive_simplify(self, coordinates: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+        """自适应简化算法，根据曲率变化调整简化程度
+        
+        Args:
+            coordinates: 原始坐标点
+            
+        Returns:
+            List[Tuple[float, float]]: 简化后的坐标点
+        """
+        if len(coordinates) <= 3:
+            return coordinates
+        
+        result = [coordinates[0]]
+        
+        for i in range(1, len(coordinates) - 1):
+            # 计算当前点的曲率
+            curvature = self._calculate_curvature(coordinates[i-1], coordinates[i], coordinates[i+1])
+            
+            # 根据曲率调整容差
+            adaptive_tolerance = self.effective_tolerance
+            if curvature > 0.1:  # 高曲率区域
+                adaptive_tolerance *= 0.5
+            elif curvature < 0.01:  # 低曲率区域
+                adaptive_tolerance *= 2.0
+            
+            # 检查是否需要保留此点
+            if len(result) >= 2:
+                distance = self._point_to_line_distance(coordinates[i], result[-2], coordinates[-1])
+                if distance > adaptive_tolerance:
+                    result.append(coordinates[i])
+            else:
+                result.append(coordinates[i])
+        
+        result.append(coordinates[-1])
+        return result
+    
+    def _calculate_curvature(self, p1: Tuple[float, float], p2: Tuple[float, float], p3: Tuple[float, float]) -> float:
+        """计算三点间的曲率
+        
+        Args:
+            p1, p2, p3: 三个连续点
+            
+        Returns:
+            float: 曲率值
+        """
+        # 计算向量
+        v1 = (p2[0] - p1[0], p2[1] - p1[1])
+        v2 = (p3[0] - p2[0], p3[1] - p2[1])
+        
+        # 计算长度
+        len1 = math.sqrt(v1[0]**2 + v1[1]**2)
+        len2 = math.sqrt(v2[0]**2 + v2[1]**2)
+        
+        if len1 == 0 or len2 == 0:
+            return 0.0
+        
+        # 计算角度变化
+        dot_product = v1[0] * v2[0] + v1[1] * v2[1]
+        cross_product = v1[0] * v2[1] - v1[1] * v2[0]
+        
+        angle = math.atan2(abs(cross_product), dot_product)
+        
+        # 曲率 = 角度变化 / 平均弧长
+        avg_length = (len1 + len2) / 2
+        return angle / avg_length if avg_length > 0 else 0.0
+    
+    def _spline_interpolation(self, coordinates: List[Tuple[float, float]], num_points: int = None) -> List[Tuple[float, float]]:
+        """使用样条插值生成平滑曲线
+        
+        Args:
+            coordinates: 控制点坐标
+            num_points: 插值点数量，默认为原点数的2倍
+            
+        Returns:
+            List[Tuple[float, float]]: 插值后的平滑坐标点
+        """
+        if len(coordinates) < 4:
+            return coordinates
+        
+        try:
+            # 提取x和y坐标
+            x_coords = [p[0] for p in coordinates]
+            y_coords = [p[1] for p in coordinates]
+            
+            # 计算累积距离作为参数
+            distances = [0]
+            for i in range(1, len(coordinates)):
+                dist = math.sqrt((x_coords[i] - x_coords[i-1])**2 + (y_coords[i] - y_coords[i-1])**2)
+                distances.append(distances[-1] + dist)
+            
+            # 创建样条插值
+            if num_points is None:
+                num_points = len(coordinates) * 2
+            
+            # 使用三次样条插值
+            t_new = np.linspace(0, distances[-1], num_points)
+            
+            # 确保有足够的点进行三次样条插值
+            if len(coordinates) >= 4:
+                spline_x = interpolate.interp1d(distances, x_coords, kind='cubic', bounds_error=False, fill_value='extrapolate')
+                spline_y = interpolate.interp1d(distances, y_coords, kind='cubic', bounds_error=False, fill_value='extrapolate')
+            else:
+                spline_x = interpolate.interp1d(distances, x_coords, kind='linear')
+                spline_y = interpolate.interp1d(distances, y_coords, kind='linear')
+            
+            x_smooth = spline_x(t_new)
+            y_smooth = spline_y(t_new)
+            
+            return list(zip(x_smooth, y_smooth))
+            
+        except Exception as e:
+            logger.warning(f"样条插值失败，使用原始坐标: {e}")
+            return coordinates
+    
+    def _fit_curve_segments_from_smooth(self, smooth_coords: List[Tuple[float, float]], start_s: float = 0.0) -> List[Dict]:
+        """从平滑坐标生成曲线段
+        
+        Args:
+            smooth_coords: 平滑后的坐标点
+            start_s: 起始s坐标
+            
+        Returns:
+            List[Dict]: 曲线段列表
+        """
+        segments = []
+        current_s = start_s
+        
+        # 检测曲线段和直线段
+        i = 0
+        while i < len(smooth_coords) - 1:
+            # 检测当前段是否为曲线
+            curve_end = self._detect_smooth_curve_segment(smooth_coords, i)
+            
+            if curve_end > i + 2:  # 找到曲线段
+                curve_coords = smooth_coords[i:curve_end + 1]
+                arc_segment = self._fit_smooth_arc(curve_coords, current_s)
+                
+                if arc_segment:
+                    segments.append(arc_segment)
+                    current_s += arc_segment['length']
+                    i = curve_end
+                else:
+                    # 曲线拟合失败，使用直线段
+                    line_segment = self._create_line_segment(smooth_coords[i], smooth_coords[i + 1], current_s, i == 0)
+                    segments.append(line_segment)
+                    current_s += line_segment['length']
+                    i += 1
+            else:
+                # 直线段
+                line_segment = self._create_line_segment(smooth_coords[i], smooth_coords[i + 1], current_s, i == 0)
+                segments.append(line_segment)
+                current_s += line_segment['length']
+                i += 1
+        
+        return segments
+    
+    def _detect_smooth_curve_segment(self, coordinates: List[Tuple[float, float]], start_idx: int) -> int:
+        """检测平滑曲线段的结束位置
+        
+        Args:
+            coordinates: 坐标点列表
+            start_idx: 起始索引
+            
+        Returns:
+            int: 曲线段结束索引
+        """
+        if start_idx >= len(coordinates) - 2:
+            return start_idx + 1
+        
+        curve_threshold = 0.05  # 曲率阈值
+        min_curve_points = 3
+        max_curve_points = min(20, len(coordinates) - start_idx)
+        
+        curve_points = 0
+        
+        for i in range(start_idx + 1, min(start_idx + max_curve_points, len(coordinates) - 1)):
+            if i + 1 < len(coordinates):
+                curvature = self._calculate_curvature(coordinates[i-1], coordinates[i], coordinates[i+1])
+                
+                if curvature > curve_threshold:
+                    curve_points += 1
+                else:
+                    # 如果已经有足够的曲线点，结束检测
+                    if curve_points >= min_curve_points:
+                        return i
+                    # 否则重置计数
+                    curve_points = 0
+        
+        # 如果到达末尾且有足够的曲线点
+        if curve_points >= min_curve_points:
+            return min(start_idx + max_curve_points - 1, len(coordinates) - 1)
+        
+        return start_idx + 1
+    
+    def _fit_smooth_arc(self, coordinates: List[Tuple[float, float]], start_s: float) -> Optional[Dict]:
+        """拟合平滑圆弧段
+        
+        Args:
+            coordinates: 曲线坐标点
+            start_s: 起始s坐标
+            
+        Returns:
+            Optional[Dict]: 圆弧段信息或None
+        """
+        if len(coordinates) < 3:
+            return None
+        
+        try:
+            # 使用最小二乘法拟合圆
+            center, radius = self._fit_circle(coordinates)
+            
+            if radius < 10 or radius > 10000:  # 半径合理性检查
+                return None
+            
+            # 计算起始和结束角度
+            start_point = coordinates[0]
+            end_point = coordinates[-1]
+            
+            start_angle = math.atan2(start_point[1] - center[1], start_point[0] - center[0])
+            end_angle = math.atan2(end_point[1] - center[1], end_point[0] - center[0])
+            
+            # 计算角度差（考虑方向）
+            angle_diff = end_angle - start_angle
+            
+            # 标准化角度差到[-π, π]
+            while angle_diff > math.pi:
+                angle_diff -= 2 * math.pi
+            while angle_diff < -math.pi:
+                angle_diff += 2 * math.pi
+            
+            # 计算弧长
+            arc_length = abs(angle_diff) * radius
+            
+            # 计算曲率（带符号）
+            curvature = angle_diff / arc_length if arc_length > 0 else 0
+            
+            # 计算起始方向
+            dx = coordinates[1][0] - coordinates[0][0]
+            dy = coordinates[1][1] - coordinates[0][1]
             heading = math.atan2(dy, dx)
             
-            # 创建直线段 - 只有第一个段包含绝对坐标
             segment = {
-                'type': 'line',
-                's': current_s,
+                'type': 'arc',
+                's': start_s,
                 'hdg': heading,
-                'length': length
+                'length': arc_length,
+                'curvature': curvature
             }
             
             # 只有第一个几何段需要绝对坐标
-            if i == 0:
+            if start_s == 0:
                 segment['x'] = start_point[0]
                 segment['y'] = start_point[1]
             
+            return segment
+            
+        except Exception as e:
+            logger.debug(f"圆弧拟合失败: {e}")
+            return None
+    
+    def _fit_adaptive_line_segments(self, coordinates: List[Tuple[float, float]], start_s: float = 0.0) -> List[Dict]:
+        """自适应直线段拟合
+        
+        Args:
+            coordinates: 坐标点列表
+            start_s: 起始s坐标
+            
+        Returns:
+            List[Dict]: 直线段列表
+        """
+        segments = []
+        current_s = start_s
+        
+        for i in range(len(coordinates) - 1):
+            segment = self._create_line_segment(coordinates[i], coordinates[i + 1], current_s, i == 0)
             segments.append(segment)
-            current_s += length
+            current_s += segment['length']
         
         return segments
+    
+    def _create_line_segment(self, start_point: Tuple[float, float], end_point: Tuple[float, float], 
+                           s_coord: float, include_xy: bool = False) -> Dict:
+        """创建直线段
+        
+        Args:
+            start_point: 起始点
+            end_point: 结束点
+            s_coord: s坐标
+            include_xy: 是否包含绝对坐标
+            
+        Returns:
+            Dict: 直线段信息
+        """
+        dx = end_point[0] - start_point[0]
+        dy = end_point[1] - start_point[1]
+        length = math.sqrt(dx**2 + dy**2)
+        heading = math.atan2(dy, dx)
+        
+        segment = {
+            'type': 'line',
+            's': s_coord,
+            'hdg': heading,
+            'length': length
+        }
+        
+        if include_xy:
+            segment['x'] = start_point[0]
+            segment['y'] = start_point[1]
+        
+        return segment
     
     def fit_line_segments(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
         """拟合直线段

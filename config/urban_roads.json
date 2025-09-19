@@ -1,11 +1,13 @@
 {
   "description": "城市道路转换配置 - 针对城市道路网络优化",
   "geometry_tolerance": 1.0,
-  "min_road_length": 10.0,
+  "min_road_length": 1.0,
   "default_lane_width": 3.0,
   "default_num_lanes": 2,
   "default_speed_limit": 40,
   "use_arc_fitting": true,
+  "use_smooth_curves": true,
+  "preserve_detail": true,
   "coordinate_precision": 3,
   "road_settings": {
     "default_road_type": "urban",

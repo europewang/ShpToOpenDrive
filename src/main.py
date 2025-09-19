@@ -50,7 +50,11 @@ class ShpToOpenDriveConverter:
         
         # 初始化组件
         self.shp_reader = None
-        self.geometry_converter = GeometryConverter(self.config['geometry_tolerance'])
+        self.geometry_converter = GeometryConverter(
+            tolerance=self.config['geometry_tolerance'],
+            smooth_curves=self.config.get('use_smooth_curves', True),
+            preserve_detail=self.config.get('preserve_detail', True)
+        )
         self.opendrive_generator = None
         
         # 转换状态
@@ -259,7 +263,10 @@ class ShpToOpenDriveConverter:
                 coordinates = road_data['coordinates']
                 
                 # 选择几何转换方法
-                if self.config['use_arc_fitting']:
+                if self.config.get('use_smooth_curves', True):
+                    # 使用新的平滑曲线拟合
+                    segments = self.geometry_converter.convert_road_geometry(coordinates)
+                elif self.config['use_arc_fitting']:
                     segments = self.geometry_converter.fit_arc_segments(coordinates)
                 else:
                     segments = self.geometry_converter.fit_line_segments(coordinates)

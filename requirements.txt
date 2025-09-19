@@ -12,6 +12,14 @@ matplotlib>=3.7.0          # 可视化（用于调试）
 folium>=0.14.0             # 地图可视化
 jupyter>=1.0.0             # 开发和测试
 
+# 3D可视化依赖
+open3d>=0.18.0             # 3D可视化和几何处理
+tkinter                    # GUI界面（Python标准库）
+
+# Web3D可视化依赖
+flask>=2.3.0               # Web服务器框架
+flask-cors>=4.0.0          # 跨域请求支持
+
 # 开发依赖
 pytest>=7.0.0              # 测试框架
 black>=23.0.0              # 代码格式化

@@ -5,7 +5,7 @@
 
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, MultiLineString
 from typing import Dict, List, Tuple, Optional
 import logging
 
@@ -220,11 +220,11 @@ class ShapefileReader:
             logger.error(f"局部坐标系转换失败: {e}")
             return False
     
-    def filter_roads_by_length(self, min_length: float = 10.0) -> int:
+    def filter_roads_by_length(self, min_length: float = 1.0) -> int:
         """根据长度过滤道路
         
         Args:
-            min_length: 最小道路长度（米）
+            min_length: 最小道路长度（米），默认1.0米以保留更多短线段
             
         Returns:
             int: 过滤后剩余的道路数量
@@ -239,6 +239,14 @@ class ShapefileReader:
         logger.info(f"长度过滤: {original_count} -> {filtered_count} 条道路")
         return filtered_count
     
+    def extract_roads_data(self) -> List[Dict]:
+        """提取道路数据（兼容性方法）
+        
+        Returns:
+            List[Dict]: 道路数据列表
+        """
+        return self.extract_road_geometries()
+    
     def get_sample_data(self, n: int = 5) -> List[Dict]:
         """获取样本数据用于调试
         
@@ -252,3 +260,22 @@ class ShapefileReader:
             self.extract_road_geometries()
         
         return self.roads_data[:n]
+    
+    def read_features(self) -> List[Dict]:
+        """读取所有道路特征
+        
+        Returns:
+            List[Dict]: 道路特征列表，每个特征包含几何和属性信息
+        """
+        if not self.load_shapefile():
+            logger.error("无法加载shapefile文件")
+            return []
+        
+        # 转换坐标系（如果需要）
+        self.convert_to_utm()
+        
+        # 提取道路几何
+        roads = self.extract_road_geometries()
+        
+        logger.info(f"成功读取 {len(roads)} 个道路特征")
+        return roads
