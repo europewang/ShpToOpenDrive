@@ -9,9 +9,9 @@ from typing import Dict, List, Optional
 import json
 from pathlib import Path
 
-from .shp_reader import ShapefileReader
-from .geometry_converter import GeometryConverter
-from .opendrive_generator import OpenDriveGenerator
+from shp_reader import ShapefileReader
+from geometry_converter import GeometryConverter
+from opendrive_generator import OpenDriveGenerator
 
 # 配置日志
 logging.basicConfig(
@@ -42,6 +42,26 @@ class ShpToOpenDriveConverter:
             'default_speed_limit': 50,      # 默认限速（km/h）
             'use_arc_fitting': False,       # 是否使用圆弧拟合
             'coordinate_precision': 3,      # 坐标精度（小数位数）
+            'use_smooth_curves': True,      # 是否使用平滑曲线拟合
+            'preserve_detail': True,        # 是否保留更多细节
+            # Lane格式专用配置
+            'lane_format_settings': {
+                'enabled': True,
+                'road_id_field': 'RoadID',
+                'index_field': 'Index',
+                'auto_detect_lane_format': True,
+                'lane_surface_generation': {
+                    'enabled': True,
+                    'width_interpolation': 'linear',
+                    'center_line_calculation': 'midpoint',
+                    'width_sampling_points': 50
+                },
+                'validation': {
+                    'check_index_continuity': True,
+                    'min_lanes_per_road': 2,
+                    'max_width_variation': 10.0
+                }
+            }
         }
         
         # 更新配置
@@ -178,30 +198,154 @@ class ShpToOpenDriveConverter:
             if not roads_geometries:
                 return []
             
-            # 处理属性映射
-            if attribute_mapping is None:
-                attribute_mapping = self.shp_reader.get_road_attributes_mapping()
-            
-            # 构建道路数据
-            roads_data = []
-            for road_geom in roads_geometries:
-                road_data = {
-                    'id': road_geom['id'],
-                    'coordinates': road_geom['coordinates'],
-                    'length': road_geom['length'],
-                    'attributes': self._map_attributes(
-                        road_geom['attributes'], 
-                        attribute_mapping
-                    )
-                }
-                roads_data.append(road_data)
-            
-            logger.info(f"提取了 {len(roads_data)} 条道路的数据")
-            return roads_data
+            # 检查是否为Lane.shp格式
+            if self._is_lane_format(roads_geometries):
+                return self._process_lane_data(roads_geometries, attribute_mapping)
+            else:
+                return self._process_traditional_data(roads_geometries, attribute_mapping)
             
         except Exception as e:
             logger.error(f"提取道路数据失败: {e}")
             return []
+    
+    def _is_lane_format(self, roads_geometries: List[Dict]) -> bool:
+        """检查是否为Lane.shp格式
+        
+        Args:
+            roads_geometries: 道路几何数据
+            
+        Returns:
+            bool: 是否为Lane格式
+        """
+        if not roads_geometries:
+            return False
+        
+        # Lane格式的特征：包含road_id、lanes、lane_surfaces字段
+        first_road = roads_geometries[0]
+        return all(key in first_road for key in ['road_id', 'lanes', 'lane_surfaces'])
+    
+    def _process_lane_data(self, roads_geometries: List[Dict], 
+                          attribute_mapping: Dict = None) -> List[Dict]:
+        """处理Lane.shp格式的数据
+        
+        Args:
+            roads_geometries: Lane格式的道路几何数据
+            attribute_mapping: 属性映射配置
+            
+        Returns:
+            List[Dict]: 处理后的道路数据
+        """
+        logger.info("处理Lane.shp格式数据")
+        
+        roads_data = []
+        
+        for road_geom in roads_geometries:
+            road_id = road_geom['road_id']
+            lanes = road_geom['lanes']  # 现在lanes就是车道面
+            lane_surfaces = road_geom['lane_surfaces']  # 与lanes相同
+            
+            # 计算道路总长度（基于中心线长度）
+            total_length = 0
+            if lanes:
+                center_coords = lanes[0].get('center_line', [])
+                if center_coords:
+                    total_length = self._calculate_line_length(center_coords)
+            
+            # 构建道路数据
+            road_data = {
+                'id': road_id,
+                'type': 'lane_based',  # 标识为基于车道的道路
+                'lanes': lanes,
+                'lane_surfaces': lane_surfaces,
+                'lane_count': len(lanes),
+                'length': total_length,
+                'attributes': self._extract_lane_attributes(lanes, attribute_mapping)
+            }
+            
+            roads_data.append(road_data)
+        
+        logger.info(f"处理了 {len(roads_data)} 条基于车道的道路")
+        return roads_data
+    
+    def _calculate_line_length(self, coords: List[tuple]) -> float:
+        """计算线段长度
+        
+        Args:
+            coords: 坐标点列表
+            
+        Returns:
+            float: 线段总长度
+        """
+        import math
+        
+        if len(coords) < 2:
+            return 0.0
+        
+        total_length = 0.0
+        for i in range(len(coords) - 1):
+            x1, y1 = coords[i]
+            x2, y2 = coords[i + 1]
+            segment_length = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            total_length += segment_length
+        
+        return total_length
+    
+    def _process_traditional_data(self, roads_geometries: List[Dict], 
+                                 attribute_mapping: Dict = None) -> List[Dict]:
+        """处理传统格式的道路数据
+        
+        Args:
+            roads_geometries: 传统格式的道路几何数据
+            attribute_mapping: 属性映射配置
+            
+        Returns:
+            List[Dict]: 处理后的道路数据
+        """
+        logger.info("处理传统格式道路数据")
+        
+        # 处理属性映射
+        if attribute_mapping is None:
+            attribute_mapping = self.shp_reader.get_road_attributes_mapping()
+        
+        # 构建道路数据
+        roads_data = []
+        for road_geom in roads_geometries:
+            road_data = {
+                'id': road_geom['id'],
+                'type': 'traditional',  # 标识为传统道路
+                'coordinates': road_geom['coordinates'],
+                'length': road_geom['length'],
+                'attributes': self._map_attributes(
+                    road_geom['attributes'], 
+                    attribute_mapping
+                )
+            }
+            roads_data.append(road_data)
+        
+        logger.info(f"处理了 {len(roads_data)} 条传统道路")
+        return roads_data
+    
+    def _extract_lane_attributes(self, lanes: List[Dict], 
+                                attribute_mapping: Dict = None) -> Dict:
+        """从车道数据中提取属性
+        
+        Args:
+            lanes: 车道列表
+            attribute_mapping: 属性映射配置
+            
+        Returns:
+            Dict: 提取的属性
+        """
+        if not lanes:
+            return {}
+        
+        # 使用第一条车道的属性作为道路属性
+        first_lane_attrs = lanes[0].get('attributes', {})
+        
+        if attribute_mapping:
+            return self._map_attributes(first_lane_attrs, attribute_mapping)
+        else:
+            return first_lane_attrs
     
     def _map_attributes(self, original_attrs: Dict, mapping: Dict) -> Dict:
         """映射属性字段
@@ -260,40 +404,17 @@ class ShpToOpenDriveConverter:
             converted_roads = []
             
             for road_data in roads_data:
-                coordinates = road_data['coordinates']
-                
-                # 选择几何转换方法
-                if self.config.get('use_smooth_curves', True):
-                    # 使用新的平滑曲线拟合
-                    segments = self.geometry_converter.convert_road_geometry(coordinates)
-                elif self.config['use_arc_fitting']:
-                    segments = self.geometry_converter.fit_arc_segments(coordinates)
+                # 检查是否为Lane格式数据
+                if road_data.get('type') == 'lane_based':
+                    # 处理Lane格式的车道面数据
+                    converted_road = self._convert_lane_based_geometry(road_data)
                 else:
-                    segments = self.geometry_converter.fit_line_segments(coordinates)
+                    # 处理传统格式的中心线数据
+                    converted_road = self._convert_traditional_geometry(road_data)
                 
-                if not segments:
-                    logger.warning(f"道路 {road_data['id']} 几何转换失败")
-                    continue
-                
-                # 验证几何连续性
-                if not self.geometry_converter.validate_geometry_continuity(segments):
-                    logger.warning(f"道路 {road_data['id']} 几何不连续")
-                    self.conversion_stats['warnings'].append(
-                        f"道路 {road_data['id']} 几何不连续"
-                    )
-                
-                # 计算总长度
-                total_length = self.geometry_converter.calculate_road_length(segments)
-                
-                converted_road = {
-                    'id': road_data['id'],
-                    'segments': segments,
-                    'attributes': road_data['attributes'],
-                    'total_length': total_length
-                }
-                
-                converted_roads.append(converted_road)
-                self.conversion_stats['total_length'] += total_length
+                if converted_road:
+                    converted_roads.append(converted_road)
+                    self.conversion_stats['total_length'] += converted_road['total_length']
             
             logger.info(f"成功转换 {len(converted_roads)} 条道路的几何")
             return converted_roads
@@ -301,6 +422,121 @@ class ShpToOpenDriveConverter:
         except Exception as e:
             logger.error(f"几何转换失败: {e}")
             return []
+    
+    def _convert_lane_based_geometry(self, road_data: Dict) -> Dict:
+        """转换基于车道的几何数据
+        
+        Args:
+            road_data: Lane格式的道路数据
+            
+        Returns:
+            Dict: 转换后的道路数据
+        """
+        try:
+            road_id = road_data['id']
+            lane_surfaces = road_data['lane_surfaces']
+            
+            # 转换车道面几何
+            converted_surfaces = self.geometry_converter.convert_lane_surface_geometry(lane_surfaces)
+            
+            if not converted_surfaces:
+                logger.warning(f"道路 {road_id} 车道面几何转换失败")
+                return None
+            
+            # 计算道路总长度（取第一个车道面的长度）
+            total_length = 0
+            if converted_surfaces:
+                first_surface = converted_surfaces[0]
+                total_length = self.geometry_converter.calculate_road_length(
+                    first_surface['center_segments']
+                )
+            
+            converted_road = {
+                'id': road_id,
+                'type': 'lane_based',
+                'lane_surfaces': converted_surfaces,
+                'lanes': road_data['lanes'],
+                'lane_count': road_data['lane_count'],
+                'attributes': road_data['attributes'],
+                'total_length': total_length
+            }
+            
+            logger.info(f"成功转换基于车道的道路 {road_id}，包含 {len(converted_surfaces)} 个车道面")
+            return converted_road
+            
+        except Exception as e:
+            logger.error(f"Lane格式道路 {road_data.get('id', 'unknown')} 几何转换失败: {e}")
+            return None
+    
+    def _convert_traditional_geometry(self, road_data: Dict) -> Dict:
+        """转换传统格式的几何数据
+        
+        Args:
+            road_data: 传统格式的道路数据
+            
+        Returns:
+            Dict: 转换后的道路数据
+        """
+        try:
+            coordinates = road_data['coordinates']
+            
+            # 选择几何转换方法
+            if self.config.get('use_smooth_curves', True):
+                # 使用新的平滑曲线拟合
+                segments = self.geometry_converter.convert_road_geometry(coordinates)
+            elif self.config['use_arc_fitting']:
+                segments = self.geometry_converter.fit_arc_segments(coordinates)
+            else:
+                segments = self.geometry_converter.fit_line_segments(coordinates)
+            
+            if not segments:
+                logger.warning(f"道路 {road_data['id']} 几何转换失败")
+                return None
+            
+            # 验证几何连续性
+            if not self.geometry_converter.validate_geometry_continuity(segments):
+                logger.warning(f"道路 {road_data['id']} 几何不连续")
+                self.conversion_stats['warnings'].append(
+                    f"道路 {road_data['id']} 几何不连续"
+                )
+            
+            # 计算总长度
+            total_length = self.geometry_converter.calculate_road_length(segments)
+            
+            converted_road = {
+                'id': road_data['id'],
+                'type': 'traditional',
+                'segments': segments,
+                'attributes': road_data['attributes'],
+                'total_length': total_length
+            }
+            
+            return converted_road
+            
+        except Exception as e:
+            logger.error(f"传统格式道路 {road_data.get('id', 'unknown')} 几何转换失败: {e}")
+            return None
+    
+    def _extract_segments_from_lane_surfaces(self, lane_surfaces: List[Dict]) -> List[Dict]:
+        """从车道面数据中提取几何段
+        
+        Args:
+            lane_surfaces: 车道面数据列表
+            
+        Returns:
+            List[Dict]: 几何段列表
+        """
+        if not lane_surfaces:
+            return []
+        
+        # 使用第一个车道面的中心线作为道路几何
+        first_surface = lane_surfaces[0]
+        if 'center_segments' in first_surface:
+            return first_surface['center_segments']
+        
+        # 如果没有center_segments，尝试从边界生成
+        logger.warning("车道面缺少center_segments，尝试从边界生成")
+        return []
     
     def _generate_opendrive(self, converted_roads: List[Dict], output_path: str) -> bool:
         """生成OpenDrive文件
@@ -320,8 +556,15 @@ class ShpToOpenDriveConverter:
             # 创建道路
             road_ids = []
             for road_data in converted_roads:
+                if road_data['type'] == 'lane_based':
+                    # 处理Lane格式道路：从车道面生成segments
+                    segments = self._extract_segments_from_lane_surfaces(road_data['lane_surfaces'])
+                else:
+                    # 处理传统格式道路
+                    segments = road_data['segments']
+                
                 road_id = self.opendrive_generator.create_road_from_segments(
-                    road_data['segments'],
+                    segments,
                     road_data['attributes']
                 )
                 

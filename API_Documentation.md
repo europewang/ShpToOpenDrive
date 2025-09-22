@@ -30,7 +30,7 @@ __init__(self, shapefile_path: str)
 **参数:**
 - `shapefile_path` (str): Shapefile 文件路径
 
-**功能:** 初始化 Shapefile 读取器
+**功能:** 初始化 Shapefile 读取器，支持传统道路格式和Lane.shp格式
 
 #### 主要方法
 
@@ -79,12 +79,41 @@ extract_road_geometries(self) -> List[Dict]
 }
 ```
 
-**功能:** 提取所有道路的几何信息和属性数据
+**功能:** 提取所有道路的几何信息和属性数据，自动检测文件格式
 
 **坐标处理:**
 - 自动检测并处理三维坐标数据（包含Z值）
 - 确保输出的坐标为二维格式 (x, y)
 - 兼容二维和三维输入数据
+
+##### extract_lane_geometries()
+```python
+extract_lane_geometries(self) -> List[Dict]
+```
+**返回值:** List[Dict] - Lane格式道路数据列表
+
+**功能:** 专门处理Lane.shp格式，按RoadID分组并构建车道面
+
+**返回数据结构:**
+```python
+[
+    {
+        'road_id': str,         # 道路ID
+        'lanes': List[Dict],    # 车道数据列表
+        'lane_surfaces': List[Dict], # 车道面数据
+        'lane_count': int,      # 车道数量
+        'attributes': Dict      # 道路属性
+    }
+]
+```
+
+##### _is_lane_shapefile()
+```python
+_is_lane_shapefile(self) -> bool
+```
+**返回值:** bool - 是否为Lane格式
+
+**功能:** 检测shapefile是否为Lane.shp格式（包含RoadID和Index字段）
 
 ##### get_road_attributes_mapping()
 ```python
@@ -162,12 +191,14 @@ get_sample_data(self, n: int = 5) -> List[Dict]
 
 #### 构造函数
 ```python
-__init__(self, tolerance: float = 1.0)
+__init__(self, tolerance: float = 1.0, use_smooth_curves: bool = True, preserve_detail: bool = True)
 ```
 **参数:**
-- `tolerance` (float): 几何拟合容差（米），默认 1.0
+- `tolerance` (float): 几何简化容差，默认 1.0 米
+- `use_smooth_curves` (bool): 是否使用平滑曲线拟合，默认 True
+- `preserve_detail` (bool): 是否保留细节，默认 True
 
-**功能:** 初始化几何转换器，设置拟合精度
+**功能:** 初始化几何转换器，支持传统道路和变宽车道面转换
 
 #### 主要方法
 
@@ -286,6 +317,48 @@ _fit_single_arc(self, coordinates: List[Tuple], start_s: float) -> Optional[Dict
 ```
 **功能:** 拟合单个圆弧段
 
+##### convert_lane_surface_geometry()
+```python
+convert_lane_surface_geometry(self, lane_surfaces: List[Dict]) -> List[Dict]
+```
+**参数:**
+- `lane_surfaces` (List[Dict]): 车道面数据列表
+
+**返回值:** List[Dict] - 转换后的车道面几何数据
+
+**功能:** 转换车道面几何，计算中心线和宽度变化曲线
+
+**返回数据结构:**
+```python
+[
+    {
+        'surface_id': str,          # 车道面ID
+        'center_segments': List[Dict], # 中心线几何段
+        'width_profile': List[Dict],   # 宽度变化曲线
+        'left_boundary': Dict,      # 左边界
+        'right_boundary': Dict      # 右边界
+    }
+]
+```
+
+##### _calculate_center_line()
+```python
+_calculate_center_line(self, left_coords: List[Tuple], right_coords: List[Tuple]) -> List[Tuple]
+```
+**功能:** 计算两条边界线的中心线
+
+##### _interpolate_coordinates()
+```python
+_interpolate_coordinates(self, coords: List[Tuple], target_count: int) -> List[Tuple]
+```
+**功能:** 插值坐标点以匹配目标数量
+
+##### _calculate_width_profile()
+```python
+_calculate_width_profile(self, left_coords: List[Tuple], right_coords: List[Tuple]) -> List[Dict]
+```
+**功能:** 计算车道宽度变化曲线
+
 ##### _fit_circle()
 ```python
 _fit_circle(self, coordinates: List[Tuple]) -> Tuple[Tuple[float, float], float]
@@ -309,6 +382,10 @@ __init__(self, name: str = "ConvertedRoad")
 - `name` (str): 道路网络名称，默认 "ConvertedRoad"
 
 **功能:** 初始化 OpenDrive 生成器
+
+**版本设置:**
+- 自动设置 OpenDrive 版本为 1.7 (revMajor=1, revMinor=7)
+- 确保生成的文件符合 OpenDrive 标准格式
 
 #### 主要方法
 
@@ -506,11 +583,18 @@ __init__(self, config: Dict = None)
     'default_num_lanes': 1,         # 默认车道数
     'default_speed_limit': 50,      # 默认限速（km/h）
     'use_arc_fitting': False,       # 是否使用圆弧拟合
+    'use_smooth_curves': True,      # 使用平滑曲线
+    'preserve_detail': True,        # 保留细节
     'coordinate_precision': 3,      # 坐标精度（小数位数）
+    'lane_format_settings': {       # Lane格式专用设置
+        'enabled': True,
+        'road_id_field': 'RoadID',
+        'index_field': 'Index'
+    }
 }
 ```
 
-**功能:** 初始化转换器，设置配置参数
+**功能:** 初始化转换器，支持传统道路和Lane.shp格式转换
 
 #### 主要方法
 
@@ -605,6 +689,48 @@ _generate_opendrive(self, converted_roads: List[Dict], output_path: str) -> bool
 _log_conversion_stats(self)
 ```
 **功能:** 记录和输出转换统计信息
+
+##### _is_lane_format()
+```python
+_is_lane_format(self, roads_data: List[Dict]) -> bool
+```
+**功能:** 检测道路数据是否为Lane格式
+
+##### _process_lane_data()
+```python
+_process_lane_data(self, roads_data: List[Dict]) -> List[Dict]
+```
+**功能:** 处理Lane格式的道路数据，按RoadID分组并构建车道面
+
+##### _process_traditional_data()
+```python
+_process_traditional_data(self, roads_data: List[Dict]) -> List[Dict]
+```
+**功能:** 处理传统格式的道路数据
+
+##### _extract_lane_attributes()
+```python
+_extract_lane_attributes(self, lane_group: List[Dict]) -> Dict
+```
+**功能:** 从车道组中提取道路属性
+
+##### _convert_lane_based_geometry()
+```python
+_convert_lane_based_geometry(self, road_data: Dict) -> Dict
+```
+**功能:** 转换基于车道的几何数据
+
+##### _convert_traditional_geometry()
+```python
+_convert_traditional_geometry(self, road_data: Dict) -> Dict
+```
+**功能:** 转换传统格式的几何数据
+
+##### _extract_segments_from_lane_surfaces()
+```python
+_extract_segments_from_lane_surfaces(self, lane_surfaces: List[Dict]) -> List[Dict]
+```
+**功能:** 从车道面数据中提取几何段用于OpenDrive生成
 
 ### 命令行接口
 
@@ -815,11 +941,53 @@ generate_road_points(self, road_data: Dict, resolution: float = 1.0) -> List[Tup
 
 ---
 
+## 7. validate_xodr.py - OpenDrive 文件验证模块
+
+### 模块说明
+验证生成的 OpenDrive (.xodr) 文件是否符合标准格式要求。
+
+### 主要功能
+
+#### validate_opendrive_file()
+```python
+validate_opendrive_file(file_path: str) -> Dict
+```
+**参数:**
+- `file_path` (str): .xodr 文件路径
+
+**返回值:** Dict - 验证结果字典
+
+**验证项目:**
+- XML 格式正确性
+- OpenDrive 根元素结构
+- Header 必需属性 (revMajor, revMinor, name)
+- Header 推荐属性 (version, date)
+- 基本统计信息 (道路数量、车道数量、总长度)
+
+#### 批量验证
+```python
+python validate_xodr.py
+```
+**功能:**
+- 自动扫描 output 目录下所有 .xodr 文件
+- 生成详细的验证报告
+- 显示验证通过率和合规性检查结果
+
+---
+
 ## 版本信息
 
-- **版本**: 1.1.0
+- **版本**: 1.2.0
 - **Python 要求**: >= 3.7
 - **主要依赖**: geopandas, shapely, scenariogeneration, numpy, flask
+
+### 更新日志
+
+#### v1.2.0 (2025-01-22)
+- 修复 OpenDrive 文件根元素版本属性问题
+- 新增 OpenDrive 文件格式验证功能
+- 改进验证逻辑，确保100%验证通过率
+- 优化 XML 生成流程，符合 OpenDrive 1.7 标准
 
 ---
 

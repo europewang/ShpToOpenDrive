@@ -21,6 +21,7 @@ class GeometryConverter:
     """几何转换器
     
     将shapefile的线性几何转换为OpenDrive的参数化几何描述。
+    支持单一道路中心线和变宽车道面的转换。
     """
     
     def __init__(self, tolerance: float = 1.0, smooth_curves: bool = True, preserve_detail: bool = True):
@@ -740,3 +741,159 @@ class GeometryConverter:
         
         # 由于我们现在使用连续的几何定义，所有段都应该是连续的
         return True
+    
+    def convert_lane_surface_geometry(self, lane_surfaces: List[Dict]) -> List[Dict]:
+        """转换车道面几何为OpenDrive格式
+        
+        Args:
+            lane_surfaces: 车道面数据列表，每个包含left_boundary和right_boundary
+            
+        Returns:
+            List[Dict]: 转换后的车道面几何数据
+        """
+        converted_surfaces = []
+        
+        for surface in lane_surfaces:
+            try:
+                # 获取左右边界坐标
+                left_coords = surface['left_boundary']['coordinates']
+                right_coords = surface['right_boundary']['coordinates']
+                
+                # 计算中心线坐标
+                center_coords = self._calculate_center_line(left_coords, right_coords)
+                
+                # 转换中心线几何
+                center_segments = self.convert_road_geometry(center_coords)
+                
+                # 计算车道宽度变化
+                width_profile = self._calculate_width_profile(left_coords, right_coords, center_segments)
+                
+                surface_data = {
+                    'surface_id': surface['surface_id'],
+                    'center_segments': center_segments,
+                    'width_profile': width_profile,
+                    'left_boundary': surface['left_boundary'],
+                    'right_boundary': surface['right_boundary']
+                }
+                
+                converted_surfaces.append(surface_data)
+                
+            except Exception as e:
+                logger.error(f"车道面 {surface.get('surface_id', 'unknown')} 几何转换失败: {e}")
+                continue
+        
+        logger.info(f"成功转换 {len(converted_surfaces)} 个车道面的几何")
+        return converted_surfaces
+    
+    def _calculate_center_line(self, left_coords: List[Tuple[float, float]], 
+                              right_coords: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+        """计算两条边界线的中心线
+        
+        Args:
+            left_coords: 左边界坐标点
+            right_coords: 右边界坐标点
+            
+        Returns:
+            List[Tuple[float, float]]: 中心线坐标点
+        """
+        # 确保两条线有相同的点数，如果不同则进行插值
+        if len(left_coords) != len(right_coords):
+            # 使用较多点数的线作为参考
+            target_points = max(len(left_coords), len(right_coords))
+            left_coords = self._interpolate_coordinates(left_coords, target_points)
+            right_coords = self._interpolate_coordinates(right_coords, target_points)
+        
+        center_coords = []
+        for left_pt, right_pt in zip(left_coords, right_coords):
+            center_x = (left_pt[0] + right_pt[0]) / 2
+            center_y = (left_pt[1] + right_pt[1]) / 2
+            center_coords.append((center_x, center_y))
+        
+        return center_coords
+    
+    def _interpolate_coordinates(self, coords: List[Tuple[float, float]], 
+                                target_points: int) -> List[Tuple[float, float]]:
+        """对坐标序列进行插值以获得指定数量的点
+        
+        Args:
+            coords: 原始坐标点
+            target_points: 目标点数
+            
+        Returns:
+            List[Tuple[float, float]]: 插值后的坐标点
+        """
+        if len(coords) == target_points:
+            return coords
+        
+        # 计算累积距离
+        distances = [0]
+        for i in range(1, len(coords)):
+            dist = math.sqrt((coords[i][0] - coords[i-1][0])**2 + 
+                           (coords[i][1] - coords[i-1][1])**2)
+            distances.append(distances[-1] + dist)
+        
+        total_length = distances[-1]
+        
+        # 生成等间距的插值点
+        interpolated_coords = []
+        for i in range(target_points):
+            target_dist = (i / (target_points - 1)) * total_length
+            
+            # 找到对应的线段
+            for j in range(len(distances) - 1):
+                if distances[j] <= target_dist <= distances[j + 1]:
+                    # 在线段内插值
+                    ratio = (target_dist - distances[j]) / (distances[j + 1] - distances[j])
+                    x = coords[j][0] + ratio * (coords[j + 1][0] - coords[j][0])
+                    y = coords[j][1] + ratio * (coords[j + 1][1] - coords[j][1])
+                    interpolated_coords.append((x, y))
+                    break
+        
+        return interpolated_coords
+    
+    def _calculate_width_profile(self, left_coords: List[Tuple[float, float]], 
+                                right_coords: List[Tuple[float, float]], 
+                                center_segments: List[Dict]) -> List[Dict]:
+        """计算车道宽度变化曲线
+        
+        Args:
+            left_coords: 左边界坐标
+            right_coords: 右边界坐标
+            center_segments: 中心线几何段
+            
+        Returns:
+            List[Dict]: 宽度变化数据
+        """
+        width_profile = []
+        
+        # 确保坐标点数相同
+        if len(left_coords) != len(right_coords):
+            target_points = max(len(left_coords), len(right_coords))
+            left_coords = self._interpolate_coordinates(left_coords, target_points)
+            right_coords = self._interpolate_coordinates(right_coords, target_points)
+        
+        # 计算每个点的宽度
+        current_s = 0.0
+        for i, (left_pt, right_pt) in enumerate(zip(left_coords, right_coords)):
+            width = math.sqrt((left_pt[0] - right_pt[0])**2 + (left_pt[1] - right_pt[1])**2)
+            
+            width_data = {
+                's': current_s,
+                'width': width,
+                'left_point': left_pt,
+                'right_point': right_pt
+            }
+            
+            width_profile.append(width_data)
+            
+            # 计算到下一个点的距离
+            if i < len(left_coords) - 1:
+                center_current = ((left_pt[0] + right_pt[0]) / 2, (left_pt[1] + right_pt[1]) / 2)
+                left_next, right_next = left_coords[i + 1], right_coords[i + 1]
+                center_next = ((left_next[0] + right_next[0]) / 2, (left_next[1] + right_next[1]) / 2)
+                
+                segment_length = math.sqrt((center_next[0] - center_current[0])**2 + 
+                                         (center_next[1] - center_current[1])**2)
+                current_s += segment_length
+        
+        return width_profile

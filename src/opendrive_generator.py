@@ -29,6 +29,11 @@ class OpenDriveGenerator:
         """
         self.name = name
         self.odr = xodr.OpenDrive(self.name)
+        
+        # 设置OpenDrive版本属性
+        self.odr.revMajor = 1
+        self.odr.revMinor = 7
+        
         self.roads = []
         self.road_id_counter = 1
         

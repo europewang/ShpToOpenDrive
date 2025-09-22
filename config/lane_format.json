@@ -1,0 +1,50 @@
+{
+  "description": "Lane.shp格式专用配置 - 支持基于车道边界线的道路转换",
+  "geometry_tolerance": 0.5,
+  "min_road_length": 5.0,
+  "default_lane_width": 3.5,
+  "default_num_lanes": 1,
+  "default_speed_limit": 50,
+  "use_arc_fitting": false,
+  "use_smooth_curves": true,
+  "preserve_detail": true,
+  "coordinate_precision": 3,
+  "lane_format_settings": {
+    "enabled": true,
+    "road_id_field": "RoadID",
+    "index_field": "Index",
+    "auto_detect_lane_format": true,
+    "lane_surface_generation": {
+      "enabled": true,
+      "width_interpolation": "linear",
+      "center_line_calculation": "midpoint",
+      "width_sampling_points": 50
+    },
+    "validation": {
+      "check_index_continuity": true,
+      "min_lanes_per_road": 2,
+      "max_width_variation": 10.0
+    }
+  },
+  "attribute_mapping": {
+    "RoadID": "road_id",
+    "Index": "lane_index",
+    "WIDTH": "lane_width",
+    "SPEED": "speed_limit",
+    "TYPE": "road_type",
+    "NAME": "road_name"
+  },
+  "output_settings": {
+    "lane_based_geometry": true,
+    "generate_lane_sections": true,
+    "variable_width_lanes": true,
+    "lane_boundary_precision": 0.1
+  },
+  "notes": [
+    "专为Lane.shp格式设计的配置",
+    "支持RoadID和Index属性的自动识别",
+    "启用车道面几何转换功能",
+    "支持变宽车道的精确建模",
+    "适合处理复杂的车道边界数据"
+  ]
+}
