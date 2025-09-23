@@ -1,77 +1,88 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-调试Lane.shp处理逻辑
+Lane.shp调试脚本
+用于调试Lane.shp文件的转换过程
 """
 
-import os
 import sys
-import logging
+import os
+import json
+from pathlib import Path
 
 # 添加src目录到Python路径
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
+from main import ShpToOpenDriveConverter
 from shp_reader import ShapefileReader
 
-# 配置日志 - 输出到文件
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('debug_output.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-def debug_lane_processing():
-    """调试Lane.shp处理过程"""
-    print("开始调试Lane.shp处理逻辑")
-    print("=" * 50)
+def debug_lane_conversion():
+    """
+    调试Lane.shp文件转换过程
+    在需要查看数据的地方设置断点
+    """
     
-    lane_shp_path = "e:\\Code\\ShpToOpenDrive\\data\\testODsample\\wh2000\\Lane.shp"
+    # 输入文件路径
+    input_shp = r"E:\Code\ShpToOpenDrive\data\testODsample\wh2000\Lane.shp"
+    output_xodr = r"E:\Code\ShpToOpenDrive\debug_output.xodr"
+    config_file = r"E:\Code\ShpToOpenDrive\config\lane_format.json"
     
-    if not os.path.exists(lane_shp_path):
-        print(f"错误：Lane.shp文件不存在 {lane_shp_path}")
+    print(f"开始调试Lane.shp文件: {input_shp}")
+    
+    # 1. 加载配置文件
+    with open(config_file, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    print(f"配置加载完成: {config}")
+    # 在此处设置断点查看配置内容
+    
+    # 2. 创建转换器
+    converter = ShpToOpenDriveConverter(config)
+    print(f"转换器创建完成")
+    
+    # 3. 创建Shapefile读取器
+    reader = ShapefileReader(input_shp)
+    print(f"Shapefile读取器创建完成")
+    
+    # 4. 加载shapefile文件
+    if not reader.load_shapefile():
+        print("加载shapefile失败")
         return
+    print(f"Shapefile文件加载完成")
     
+    # 5. 检查是否为Lane格式
+    is_lane_format = reader._is_lane_shapefile()
+    print(f"是否为Lane格式: {is_lane_format}")
+    # 在此处设置断点查看格式检测结果
+    
+    # 6. 读取几何数据
+    geometries = reader.extract_lane_geometries()
+    print(f"读取到 {len(geometries)} 条道路")
+    # 在此处设置断点查看几何数据
+    
+    # 7. 检查第一条数据的结构
+    if geometries:
+        first_road = geometries[0]
+        print(f"第一条道路数据: {first_road}")
+        # 在此处设置断点查看第一条数据的详细结构
+        
+        # 检查车道信息
+        if 'lanes' in first_road:
+            lanes = first_road['lanes']
+            print(f"车道数量: {len(lanes)}")
+            if lanes:
+                print(f"第一条车道: {lanes[0]}")
+            # 在此处设置断点查看车道信息
+    
+    # 8. 执行转换
     try:
-        # 创建shapefile读取器
-        reader = ShapefileReader(lane_shp_path)
-        
-        # 加载shapefile
-        success = reader.load_shapefile()
-        if not success:
-            print("错误：无法加载Lane.shp文件")
-            return
-        
-        print(f"成功加载Lane.shp文件，包含 {len(reader.gdf)} 条记录")
-        
-        # 检查前几条记录的RoadID和Index
-        print("\n前10条记录的RoadID和Index:")
-        for i in range(min(10, len(reader.gdf))):
-            row = reader.gdf.iloc[i]
-            print(f"  记录{i}: RoadID={row['RoadID']}, Index={row['Index']}")
-        
-        # 提取Lane几何数据（只处理前3个RoadID）
-        print("\n开始提取车道数据...")
-        roads_geometries = reader.extract_lane_geometries()
-        
-        print(f"\n提取完成，共 {len(roads_geometries)} 条道路")
-        
-        # 显示前3条道路的详细信息
-        for i, road in enumerate(roads_geometries[:3]):
-            print(f"\n道路 {i+1}:")
-            print(f"  RoadID: {road['road_id']}")
-            print(f"  车道数量: {len(road['lanes'])}")
-            print(f"  车道面数量: {len(road['lane_surfaces'])}")
-            
-            if road['lanes']:
-                print(f"  车道面IDs: {[lane['surface_id'] for lane in road['lanes']]}")
-        
+        converter.convert(input_shp, output_xodr)
+        print(f"转换完成，输出文件: {output_xodr}")
     except Exception as e:
-        print(f"调试失败: {e}")
-        logger.exception("调试异常")
+        print(f"转换过程中出现错误: {e}")
+        # 在此处设置断点查看错误详情
+        raise
+    
+    print("调试完成")
 
 if __name__ == "__main__":
-    debug_lane_processing()
+    debug_lane_conversion()

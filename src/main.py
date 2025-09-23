@@ -14,9 +14,20 @@ from geometry_converter import GeometryConverter
 from opendrive_generator import OpenDriveGenerator
 
 # 配置日志
+# 确保logs目录存在
+log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# 配置日志输出到文件
+log_file = os.path.join(log_dir, 'shp_to_opendrive.log')
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8'),
+        # 如果需要同时在控制台显示，可以取消下面这行的注释
+        # logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -70,8 +81,14 @@ class ShpToOpenDriveConverter:
         
         # 初始化组件
         self.shp_reader = None
+        # 对于Lane格式，使用更严格的几何转换参数
+        geometry_tolerance = self.config['geometry_tolerance']
+        if self.config.get('lane_format_settings', {}).get('enabled', False):
+            # Lane格式使用更小的容差以保持复杂形状
+            geometry_tolerance = min(geometry_tolerance, 0.3)
+        
         self.geometry_converter = GeometryConverter(
-            tolerance=self.config['geometry_tolerance'],
+            tolerance=geometry_tolerance,
             smooth_curves=self.config.get('use_smooth_curves', True),
             preserve_detail=self.config.get('preserve_detail', True)
         )
@@ -557,16 +574,18 @@ class ShpToOpenDriveConverter:
             road_ids = []
             for road_data in converted_roads:
                 if road_data['type'] == 'lane_based':
-                    # 处理Lane格式道路：从车道面生成segments
-                    segments = self._extract_segments_from_lane_surfaces(road_data['lane_surfaces'])
+                    # 处理Lane格式道路：直接使用车道面数据
+                    road_id = self.opendrive_generator.create_road_from_lane_surfaces(
+                        road_data['lane_surfaces'],
+                        road_data['attributes']
+                    )
                 else:
                     # 处理传统格式道路
                     segments = road_data['segments']
-                
-                road_id = self.opendrive_generator.create_road_from_segments(
-                    segments,
-                    road_data['attributes']
-                )
+                    road_id = self.opendrive_generator.create_road_from_segments(
+                        segments,
+                        road_data['attributes']
+                    )
                 
                 if road_id > 0:
                     road_ids.append(road_id)

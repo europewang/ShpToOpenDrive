@@ -56,6 +56,12 @@ class GeometryConverter:
             logger.warning("坐标点数量不足，无法转换")
             return []
         
+        # 对于高密度坐标点（通常来自插值），优先保持原始形状
+        if len(coordinates) > 50:
+            logger.debug(f"检测到高密度坐标（{len(coordinates)}个点），使用保形转换")
+            # 使用自适应直线段拟合，保持更多细节
+            return self._fit_adaptive_line_segments(coordinates)
+        
         # 根据配置选择转换方法
         if self.smooth_curves and len(coordinates) >= 3:
             # 使用平滑曲线拟合
@@ -787,7 +793,7 @@ class GeometryConverter:
     
     def _calculate_center_line(self, left_coords: List[Tuple[float, float]], 
                               right_coords: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
-        """计算两条边界线的中心线
+        """计算两条边界线的中心线，保持复杂形状
         
         Args:
             left_coords: 左边界坐标点
@@ -796,18 +802,32 @@ class GeometryConverter:
         Returns:
             List[Tuple[float, float]]: 中心线坐标点
         """
-        # 确保两条线有相同的点数，如果不同则进行插值
-        if len(left_coords) != len(right_coords):
-            # 使用较多点数的线作为参考
-            target_points = max(len(left_coords), len(right_coords))
-            left_coords = self._interpolate_coordinates(left_coords, target_points)
-            right_coords = self._interpolate_coordinates(right_coords, target_points)
+        # 使用更密集的采样点来保持复杂形状
+        max_points = max(len(left_coords), len(right_coords))
+        # 对于点数较少的车道面，大幅增加采样密度以保持曲线形状
+        if max_points <= 10:
+            target_points = max(max_points * 10, 50)  # 少点数时增加10倍采样
+        else:
+            target_points = max(max_points * 2, 100)  # 多点数时增加2倍采样
+        
+        logger.debug(f"车道面中心线计算：原始点数 {max_points}，目标点数 {target_points}")
+        
+        # 对两条边界线进行高密度插值
+        left_interpolated = self._interpolate_coordinates(left_coords, target_points)
+        right_interpolated = self._interpolate_coordinates(right_coords, target_points)
         
         center_coords = []
-        for left_pt, right_pt in zip(left_coords, right_coords):
+        for left_pt, right_pt in zip(left_interpolated, right_interpolated):
             center_x = (left_pt[0] + right_pt[0]) / 2
             center_y = (left_pt[1] + right_pt[1]) / 2
             center_coords.append((center_x, center_y))
+        
+        # 应用自适应简化，但保留更多细节
+        if self.preserve_detail and len(center_coords) > 10:
+            # 使用更小的容差来保留更多细节
+            simplified_coords = self._adaptive_simplify(center_coords)
+            logger.debug(f"中心线计算：原始点数 {len(center_coords)}，简化后 {len(simplified_coords)}")
+            return simplified_coords
         
         return center_coords
     

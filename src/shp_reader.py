@@ -8,8 +8,25 @@ import pandas as pd
 from shapely.geometry import LineString, Point, MultiLineString
 from typing import Dict, List, Tuple, Optional
 import logging
+import os
 
-logging.basicConfig(level=logging.INFO)
+# 配置日志输出到文件
+log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'shp_to_opendrive.log')
+
+# 只在没有配置过的情况下配置日志
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            # 如果需要同时在控制台显示，可以取消下面这行的注释
+            # logging.StreamHandler()
+        ]
+    )
+
 logger = logging.getLogger(__name__)
 
 

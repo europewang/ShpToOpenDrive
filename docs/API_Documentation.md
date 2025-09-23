@@ -4,6 +4,17 @@
 
 ShpToOpenDrive 是一个将 Shapefile 格式的道路数据转换为 OpenDrive 标准格式的 Python 工具包。该项目提供了完整的转换流程，包括数据读取、几何处理、格式转换和文件生成。
 
+## 系统架构
+
+详细的转换流程和组件交互请参考：[序列图文档](docs/sequence_diagram.md)
+
+该文档包含：
+- 主要转换流程序列图
+- 车道面处理详细流程
+- 几何转换详细流程
+- 文件生成流程
+- 关键组件说明
+
 ## 模块架构
 
 ```
@@ -180,6 +191,76 @@ get_sample_data(self, n: int = 5) -> List[Dict]
 
 **功能:** 获取前 n 条道路的样本数据用于预览和测试
 
+##### _build_lanes_from_boundaries() (v1.2.0新增)
+```python
+_build_lanes_from_boundaries(self, boundary_lines: List[Dict]) -> List[Dict]
+```
+**参数:**
+- `boundary_lines` (List[Dict]): 边界线列表
+
+**返回值:** List[Dict] - 车道面列表
+
+**功能:** 从边界线构建车道面，相邻边界线组合成车道面
+
+**构建流程:**
+1. 按Index排序边界线确保正确的相邻关系
+2. 相邻边界线组合成车道面
+3. 计算车道面中心线和宽度变化
+4. 合并边界属性信息
+
+**车道面数据结构:**
+```python
+{
+    'surface_id': str,           # 车道面ID (格式: "左Index_右Index")
+    'left_boundary': Dict,       # 左边界信息
+    'right_boundary': Dict,      # 右边界信息
+    'center_line': List[tuple],  # 中心线坐标
+    'width_profile': List[Dict], # 宽度变化曲线
+    'attributes': Dict           # 合并的属性信息
+}
+```
+
+##### _calculate_center_line() (v1.2.0新增)
+```python
+_calculate_center_line(self, left_coords: List[tuple], right_coords: List[tuple]) -> List[tuple]
+```
+**参数:**
+- `left_coords` (List[tuple]): 左边界坐标
+- `right_coords` (List[tuple]): 右边界坐标
+
+**返回值:** List[tuple] - 中心线坐标
+
+**功能:** 计算两条边界线之间的中心线
+
+**算法:**
+- 确保两条线有相同的点数（取较少的点数）
+- 计算对应点的中点坐标
+- 生成中心线坐标序列
+
+##### _calculate_width_profile() (v1.2.0新增)
+```python
+_calculate_width_profile(self, left_coords: List[tuple], right_coords: List[tuple]) -> List[Dict]
+```
+**参数:**
+- `left_coords` (List[tuple]): 左边界坐标
+- `right_coords` (List[tuple]): 右边界坐标
+
+**返回值:** List[Dict] - 宽度变化数据
+
+**功能:** 计算车道宽度变化曲线，支持变宽车道的描述
+
+##### _merge_boundary_attributes() (v1.2.0新增)
+```python
+_merge_boundary_attributes(self, left_attrs: Dict, right_attrs: Dict) -> Dict
+```
+**参数:**
+- `left_attrs` (Dict): 左边界属性
+- `right_attrs` (Dict): 右边界属性
+
+**返回值:** Dict - 合并后的属性
+
+**功能:** 合并左右边界的属性信息，生成车道面的综合属性
+
 ---
 
 ## 2. geometry_converter.py - 几何转换模块
@@ -343,21 +424,55 @@ convert_lane_surface_geometry(self, lane_surfaces: List[Dict]) -> List[Dict]
 
 ##### _calculate_center_line()
 ```python
-_calculate_center_line(self, left_coords: List[Tuple], right_coords: List[Tuple]) -> List[Tuple]
+_calculate_center_line(self, left_coords: List[Tuple[float, float]], right_coords: List[Tuple[float, float]]) -> List[Tuple[float, float]]
 ```
-**功能:** 计算两条边界线的中心线
+**参数:**
+- `left_coords` (List[Tuple[float, float]]): 左边界坐标点
+- `right_coords` (List[Tuple[float, float]]): 右边界坐标点
+
+**返回值:** List[Tuple[float, float]] - 中心线坐标点
+
+**功能:** 计算两条边界线的中心线，保持复杂形状。使用高密度插值来保持曲线形状，对于点数较少的车道面增加10倍采样密度。
+
+**算法特点:**
+- 自适应采样密度：少点数时增加10倍采样，多点数时增加2倍采样
+- 高密度插值保持复杂曲线形状
+- 支持不同长度的左右边界线
 
 ##### _interpolate_coordinates()
 ```python
 _interpolate_coordinates(self, coords: List[Tuple], target_count: int) -> List[Tuple]
 ```
-**功能:** 插值坐标点以匹配目标数量
+**参数:**
+- `coords` (List[Tuple]): 原始坐标点
+- `target_count` (int): 目标点数
+
+**返回值:** List[Tuple] - 插值后的坐标点
+
+**功能:** 插值坐标点以匹配目标数量，基于累积距离进行等间距插值
 
 ##### _calculate_width_profile()
 ```python
-_calculate_width_profile(self, left_coords: List[Tuple], right_coords: List[Tuple]) -> List[Dict]
+_calculate_width_profile(self, left_coords: List[Tuple], right_coords: List[Tuple], center_segments: List[Dict]) -> List[Dict]
 ```
-**功能:** 计算车道宽度变化曲线
+**参数:**
+- `left_coords` (List[Tuple]): 左边界坐标
+- `right_coords` (List[Tuple]): 右边界坐标
+- `center_segments` (List[Dict]): 中心线几何段
+
+**返回值:** List[Dict] - 宽度变化曲线数据
+
+**功能:** 计算车道宽度变化曲线，支持变宽车道的精确描述
+
+**返回数据结构:**
+```python
+[
+    {
+        's': float,      # 沿中心线的距离
+        'width': float   # 该位置的车道宽度
+    }
+]
+```
 
 ##### _fit_circle()
 ```python
@@ -507,6 +622,29 @@ generate_file(self, output_path: str) -> bool
 2. 调整道路和车道连接关系
 3. 写入 XML 文件
 
+##### create_road_from_lane_surfaces() (v1.2.0新增)
+```python
+create_road_from_lane_surfaces(self, lane_surfaces: List[Dict], road_attributes: Dict = None) -> int
+```
+**参数:**
+- `lane_surfaces` (List[Dict]): 车道面数据列表
+- `road_attributes` (Dict, 可选): 道路属性
+
+**返回值:** int - 创建的道路ID，失败时返回-1
+
+**功能:** 从车道面数据创建道路，支持多车道面的复杂道路结构
+
+**处理流程:**
+1. 计算道路参考线（使用所有车道面的平均中心线）
+2. 创建道路几何（planView）
+3. 创建基于车道面的车道剖面
+4. 生成完整的道路对象
+
+**特点:**
+- 支持变宽车道的精确描述
+- 自动计算平均中心线作为道路参考线
+- 智能处理车道宽度变化
+
 ##### validate_opendrive()
 ```python
 validate_opendrive(self) -> Dict[str, any]
@@ -557,6 +695,68 @@ _create_planview_from_segments(self, segments: List[Dict]) -> xodr.PlanView
 _create_lane_section(self, attributes: Dict) -> xodr.Lanes
 ```
 **功能:** 根据属性创建车道剖面
+
+##### _calculate_road_reference_line() (v1.2.0新增)
+```python
+_calculate_road_reference_line(self, lane_surfaces: List[Dict]) -> List[Dict]
+```
+**参数:**
+- `lane_surfaces` (List[Dict]): 车道面数据列表
+
+**返回值:** List[Dict] - 道路参考线的几何段
+
+**功能:** 计算道路参考线（所有车道面的平均中心线）
+
+**算法策略:**
+- 单车道面：直接使用其中心线
+- 多车道面：计算所有中心线的平均线
+- 支持从边界线动态计算中心线
+
+##### _calculate_center_line_coords() (v1.2.0新增)
+```python
+_calculate_center_line_coords(self, left_coords: List[Tuple[float, float]], right_coords: List[Tuple[float, float]]) -> List[Tuple[float, float]]
+```
+**参数:**
+- `left_coords` (List[Tuple[float, float]]): 左边界坐标
+- `right_coords` (List[Tuple[float, float]]): 右边界坐标
+
+**返回值:** List[Tuple[float, float]] - 中心线坐标
+
+**功能:** 从左右边界计算中心线坐标，确保两边界点数相同
+
+##### _calculate_average_center_line() (v1.2.0新增)
+```python
+_calculate_average_center_line(self, all_center_coords: List[List[Tuple[float, float]]]) -> List[Tuple[float, float]]
+```
+**参数:**
+- `all_center_coords` (List[List[Tuple[float, float]]]): 所有车道面的中心线坐标列表
+
+**返回值:** List[Tuple[float, float]] - 平均中心线坐标
+
+**功能:** 计算多个中心线的平均线，用于生成道路参考线
+
+**算法:**
+- 找到最短中心线长度作为基准
+- 对每个位置计算所有中心线的坐标平均值
+- 生成统一长度的平均中心线
+
+##### _create_lane_section_from_surfaces() (v1.2.0新增)
+```python
+_create_lane_section_from_surfaces(self, lane_surfaces: List[Dict], attributes: Dict = None) -> xodr.Lanes
+```
+**参数:**
+- `lane_surfaces` (List[Dict]): 车道面数据列表
+- `attributes` (Dict, 可选): 道路属性
+
+**返回值:** xodr.Lanes - 车道对象
+
+**功能:** 从车道面数据创建车道剖面，支持变宽车道
+
+**变宽车道处理:**
+- 检测宽度变化超过0.1米的车道
+- 为变宽车道创建多个width元素
+- 等宽车道使用单个width元素
+- 自动添加车道标线
 
 ---
 
@@ -637,6 +837,64 @@ get_conversion_stats(self) -> Dict
 ```
 
 **功能:** 获取转换过程的详细统计信息
+
+##### _process_lane_data() (v1.2.0新增)
+```python
+_process_lane_data(self, roads_geometries: List[Dict], attribute_mapping: Dict = None) -> List[Dict]
+```
+**参数:**
+- `roads_geometries` (List[Dict]): Lane格式的道路几何数据
+- `attribute_mapping` (Dict, 可选): 属性映射配置
+
+**返回值:** List[Dict] - 处理后的道路数据
+
+**功能:** 处理Lane.shp格式的数据，构建基于车道面的道路结构
+
+**处理特点:**
+- 支持车道面数据结构
+- 计算基于中心线的道路长度
+- 提取车道属性信息
+- 标识为lane_based类型道路
+
+##### _convert_lane_based_geometry() (v1.2.0新增)
+```python
+_convert_lane_based_geometry(self, road_data: Dict) -> Dict
+```
+**参数:**
+- `road_data` (Dict): Lane格式的道路数据
+
+**返回值:** Dict - 转换后的道路数据
+
+**功能:** 转换基于车道的几何数据，调用geometry_converter进行车道面几何转换
+
+**转换流程:**
+1. 提取车道面数据
+2. 调用convert_lane_surface_geometry进行几何转换
+3. 计算道路总长度
+4. 构建完整的转换后道路数据
+
+##### _extract_segments_from_lane_surfaces() (v1.2.0新增)
+```python
+_extract_segments_from_lane_surfaces(self, lane_surfaces: List[Dict]) -> List[Dict]
+```
+**参数:**
+- `lane_surfaces` (List[Dict]): 车道面数据列表
+
+**返回值:** List[Dict] - 几何段列表
+
+**功能:** 从车道面数据中提取几何段，优先使用center_segments，备选从边界生成
+
+##### _extract_lane_attributes() (v1.2.0新增)
+```python
+_extract_lane_attributes(self, lanes: List[Dict], attribute_mapping: Dict = None) -> Dict
+```
+**参数:**
+- `lanes` (List[Dict]): 车道数据列表
+- `attribute_mapping` (Dict, 可选): 属性映射配置
+
+**返回值:** Dict - 提取的车道属性
+
+**功能:** 从车道数据中提取属性信息，支持自定义属性映射
 
 ##### save_conversion_report()
 ```python
@@ -872,11 +1130,44 @@ parse_file(self, file_path: str) -> Dict
 get_road_center_lines(self, resolution: float = 1.0) -> Dict[str, Dict]
 ```
 **参数:**
-- `resolution` (float): 采样分辨率（米），默认 1.0
+- `resolution` (float): 采样分辨率（米），默认1.0
 
-**返回值:** Dict[str, Dict] - 道路中心线字典，键为道路ID，值包含坐标和长度信息
+**返回值:** Dict[str, Dict] - 道路中心线字典
 
-**功能:** 生成所有道路的中心线点序列，用于 3D 可视化
+**功能:** 获取所有道路的中心线点序列
+
+**返回数据结构:**
+```python
+{
+    'road_id': {
+        'coordinates': List[Tuple[float, float]],  # 中心线坐标点
+        'length': float                            # 道路长度
+    }
+}
+```
+
+**特点:**
+- 支持自定义采样分辨率
+- 自动过滤无几何数据的道路
+- 返回完整的坐标序列和长度信息
+
+##### generate_road_points() (v1.2.0新增)
+```python
+generate_road_points(self, road: Dict, resolution: float = 1.0) -> List[Tuple[float, float]]
+```
+**参数:**
+- `road` (Dict): 道路数据字典
+- `resolution` (float): 采样分辨率（米），默认1.0
+
+**返回值:** List[Tuple[float, float]] - 道路中心线坐标点
+
+**功能:** 根据道路的planView几何数据生成中心线坐标点序列
+
+**支持的几何类型:**
+- 直线（line）几何
+- 圆弧（arc）几何
+- 螺旋线（spiral）几何
+- 多项式（poly3）几何
 
 ##### get_statistics()
 ```python
@@ -933,7 +1224,37 @@ generate_road_points(self, road_data: Dict, resolution: float = 1.0) -> List[Tup
 
 ## 最近更新
 
-### 2025年1月 - v1.1.0
+### v1.2.0 (最新版本)
+
+#### 新增功能
+1. **车道面生成系统**: 全新的车道面处理架构
+   - `create_road_from_lane_surfaces()`: 从车道面数据创建道路
+   - `_calculate_road_reference_line()`: 智能计算道路参考线
+   - `_calculate_average_center_line()`: 多车道面平均中心线计算
+   - 支持复杂多车道面道路结构
+
+2. **高精度中心线计算**: 改进的中心线生成算法
+   - 自适应采样密度：少点数时增加10倍采样
+   - 高密度插值保持复杂曲线形状
+   - 支持不同长度的左右边界线
+
+3. **车道面构建系统**: 从边界线自动构建车道面
+   - `_build_lanes_from_boundaries()`: 智能车道面构建
+   - 按Index排序确保正确的相邻关系
+   - 自动计算中心线和宽度变化
+
+4. **Lane.shp格式支持**: 完整的车道面数据处理
+   - `_process_lane_data()`: 专门的Lane格式数据处理
+   - `_convert_lane_based_geometry()`: 车道几何转换
+   - 支持基于车道面的道路结构
+
+#### 算法优化
+- **平均中心线算法**: 多车道面的智能参考线生成
+- **变宽车道检测**: 精确识别宽度变化超过0.1米的车道
+- **几何段提取**: 从车道面数据提取道路几何
+- **属性合并**: 智能合并左右边界属性
+
+### v1.1.0
 - **新增功能**: 添加 OpenDrive 文件解析和可视化支持
 - **修复问题**: 修复 `get_road_center_lines()` 方法返回格式不匹配导致的 metadata 访问错误
 - **改进**: 统一 Shapefile 和 OpenDrive 文件的处理流程
@@ -977,17 +1298,93 @@ python validate_xodr.py
 
 ## 版本信息
 
-- **版本**: 1.2.0
-- **Python 要求**: >= 3.7
-- **主要依赖**: geopandas, shapely, scenariogeneration, numpy, flask
+**当前版本**: v1.2.0  
+**更新日期**: 2025年1月  
+**兼容性**: Python 3.7+, OpenDRIVE 1.4+
 
 ### 更新日志
 
-#### v1.2.0 (2025-01-22)
-- 修复 OpenDrive 文件根元素版本属性问题
-- 新增 OpenDrive 文件格式验证功能
-- 改进验证逻辑，确保100%验证通过率
-- 优化 XML 生成流程，符合 OpenDrive 1.7 标准
+#### v1.2.0 (2025年1月)
+- **重大更新**: 新增车道面生成系统，支持从车道面数据创建道路
+- **新增功能**: 高精度中心线计算，自适应采样密度算法
+- **新增功能**: 车道面构建系统，从边界线自动构建车道面
+- **新增功能**: Lane.shp格式完整支持，专门的车道数据处理
+- **算法优化**: 平均中心线算法，多车道面智能参考线生成
+- **算法优化**: 变宽车道精确检测和处理
+- 新增 `validate_xodr.py` 模块，提供 OpenDRIVE 文件验证功能
+- 增强错误处理和日志记录
+- 优化几何转换算法
+- 改进文档结构和示例
+
+#### v1.1.0 (2024年12月)
+- 新增 `xodr_parser.py` 模块，支持 OpenDRIVE 文件解析
+- 添加 Web API 接口
+- 增强几何转换精度
+- 优化内存使用
+- **变宽车道支持**: 新增对车道宽度变化的精确描述
+- **几何转换优化**: 改进了几何段转换算法
+- **日志系统增强**: 添加了详细的处理日志
+
+#### v1.0.0 (2024年11月)
+- 初始版本发布
+- 基础 Shapefile 到 OpenDRIVE 转换功能
+- 支持直线和圆弧几何
+- 基本的车道配置
+
+---
+
+## v1.2.0 版本总结
+
+### 核心改进
+
+#### 1. 车道面生成系统
+v1.2.0版本引入了全新的车道面处理架构，支持从复杂的车道面数据创建精确的OpenDRIVE道路：
+
+- **智能参考线计算**: 自动计算多车道面的平均中心线作为道路参考线
+- **变宽车道支持**: 精确处理宽度变化超过0.1米的车道
+- **车道面构建**: 从边界线自动构建完整的车道面结构
+
+#### 2. 高精度几何算法
+新版本大幅提升了几何计算的精度和稳定性：
+
+- **自适应采样**: 根据数据复杂度自动调整采样密度
+- **形状保持**: 高密度插值确保复杂曲线形状不失真
+- **边界处理**: 智能处理不同长度的左右边界线
+
+#### 3. Lane.shp格式完整支持
+专门针对Lane.shp格式优化的数据处理流程：
+
+- **专用处理器**: `_process_lane_data()` 专门处理车道数据
+- **几何转换**: `_convert_lane_based_geometry()` 优化的车道几何转换
+- **属性合并**: 智能合并左右边界的属性信息
+
+### 技术特点
+
+#### 算法优势
+- **平均中心线算法**: 多车道面的智能参考线生成，确保道路几何的准确性
+- **变宽车道检测**: 精确识别和处理宽度变化，支持复杂的车道轮廓
+- **几何段提取**: 从车道面数据高效提取道路几何信息
+
+#### 数据结构优化
+- **车道面数据结构**: 完整的车道面信息包含边界、中心线、宽度变化等
+- **宽度变化曲线**: 精确描述车道宽度沿道路的变化情况
+- **属性映射**: 灵活的属性映射机制支持不同数据源
+
+### 应用场景
+
+v1.2.0版本特别适用于：
+
+1. **复杂道路建模**: 多车道、变宽车道的精确建模
+2. **高精度仿真**: 自动驾驶仿真对道路几何的高精度要求
+3. **数据转换**: 从GIS数据到仿真数据的无损转换
+4. **道路设计**: 支持复杂道路设计的数字化表达
+
+### 兼容性
+
+- **向后兼容**: 完全兼容v1.1.0的所有功能
+- **数据格式**: 支持Road.shp和Lane.shp两种数据格式
+- **OpenDRIVE标准**: 符合OpenDRIVE 1.4+标准
+- **Python版本**: 支持Python 3.7+
 
 ---
 

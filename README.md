@@ -7,6 +7,19 @@ ShpToOpenDrive 是一个强大的工具，用于将 Shapefile 格式的道路数
 - **传统道路格式**: 包含道路中心线的标准shapefile
 - **Lane.shp格式**: 包含车道边界线的详细车道数据，支持变宽车道面
 
+## 系统架构
+
+项目采用模块化设计，主要包含以下核心组件：
+
+- **ShpToOpenDriveConverter**: 主控制器，协调整个转换流程
+- **ShapefileReader**: 数据读取模块，处理shapefile文件和坐标转换
+- **GeometryConverter**: 几何转换模块，将离散点转换为参数化几何
+- **OpenDriveGenerator**: 文件生成模块，输出标准OpenDRIVE格式
+
+详细的转换流程和组件交互请参考：[docs/sequence_diagram.md](docs/sequence_diagram.md)
+
+完整的API文档请参考：[docs/API_Documentation.md](docs/API_Documentation.md)
+
 ## 目录结构
 - data/: 放置输入的shapefile文件
 - output/: 转换后的OpenDrive文件输出目录
@@ -25,7 +38,7 @@ ShpToOpenDrive 是一个强大的工具，用于将 Shapefile 格式的道路数
 ### 传统道路格式转换
 ```bash
 # 使用默认配置快速转换
-python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/example_config.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/CenterLane.shp', 'output/CenterLane.xodr'); print('转换成功!' if result else '转换失败!')"
+python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/default.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/CenterLane.shp', 'output/CenterLane.xodr'); print('转换成功!' if result else '转换失败!')"
 
 # 使用高精度配置转换
 python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/high_precision.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/sample_roads.shp', 'output/sample_roads.xodr'); print('转换成功!' if result else '转换失败!')"
@@ -76,6 +89,14 @@ python -c "from src.main import ShpToOpenDriveConverter; config = {'tolerance': 
   - SPEED: 限速
   - TYPE: 车道类型
 
+#### 变宽车道支持
+系统现在能够自动检测和处理变宽车道：
+- **自动检测**：通过分析车道面的边界线间距变化，自动识别变宽车道
+- **精确计算**：沿车道中心线计算每个位置的精确宽度
+- **OpenDRIVE兼容**：生成符合OpenDRIVE标准的多个`<width>`元素
+- **阈值控制**：宽度变化超过0.1米时识别为变宽车道，否则视为等宽车道
+- **详细日志**：输出变宽车道的检测结果和宽度变化范围
+
 ## 属性映射
 
 ### 传统格式属性映射
@@ -106,27 +127,13 @@ Lane.shp格式自动识别以下属性：
 - 平滑的几何过渡
 - 详细的车道信息
 
-## 文件验证
+## 输出验证
 
-### 验证生成的OpenDrive文件
-```bash
-# 验证所有输出文件
-python validate_xodr.py
-```
-
-### 验证功能
-- **格式验证**: 检查XML结构和OpenDrive标准合规性
-- **版本检查**: 确保文件包含正确的版本信息（revMajor, revMinor）
-- **统计信息**: 显示道路数量、车道数量、总长度等
-- **合规性检查**: 检查地理参考信息和连接关系
-- **批量验证**: 自动扫描output目录下所有.xodr文件
-
-### 验证报告
-验证脚本会生成详细报告，包括：
-- ✓ 验证通过的文件
-- ⚠️ 警告信息（如缺少推荐属性）
-- ❌ 错误信息（如格式不正确）
-- 📊 统计信息和验证通过率
+生成的OpenDRIVE文件符合OpenDRIVE 1.7标准，包含：
+- 标准XML结构和版本信息
+- 完整的道路几何定义
+- 准确的车道信息
+- 地理参考坐标系
 
 ## 版本信息
 
