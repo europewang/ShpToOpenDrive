@@ -9,8 +9,8 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+            "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
         }
     }
     </script>
@@ -22,7 +22,7 @@
             <h1>ShpToOpenDrive - Web3D可视化</h1>
             <div class="controls">
                 <button id="loadSampleBtn" class="btn btn-primary">加载示例文件</button>
-                <input type="file" id="fileInput" accept=".shp,.shx,.dbf,.prj,.cpg,.sbn,.sbx,.xodr" multiple style="display: none;">
+                <input type="file" id="fileInput" accept=".shp,.shx,.dbf,.prj,.cpg,.sbn,.sbx,.xodr,.obj" multiple style="display: none;">
                 <button id="loadFileBtn" class="btn btn-secondary">上传文件</button>
                 <button id="resetViewBtn" class="btn btn-info">重置视角</button>
                 <div class="export-group">
@@ -87,6 +87,8 @@
                 </div>
                 <div id="error" class="error" style="display: none;"></div>
                 
+
+                
                 <!-- 操作说明面板 -->
                 <div id="controlsHelp" class="controls-help">
                     <h4>操作说明</h4>
@@ -122,7 +124,7 @@
                         <div class="controls-row mouse-controls">
                             <div class="control-item">
                                 <span class="key">鼠标左键</span>
-                                <span class="action">选择线条</span>
+                                <span class="action">选择线条 / 移动视角</span>
                             </div>
 
                             <div class="control-item">
@@ -143,7 +145,7 @@
         <!-- 状态栏 -->
         <footer class="status-bar">
             <span id="status">就绪</span>
-            <span id="coordinates">坐标: (0, 0, 0)</span>
+            <span id="coordinates">坐标: (<span id="statusX">--</span>, <span id="statusY">--</span>, <span id="statusZ">--</span>)</span>
         </footer>
     </div>
 

@@ -1,11 +1,16 @@
 {
   "description": "默认转换配置",
   "geometry_tolerance": 1.0,
-  "min_road_length": 10.0,
+  "min_road_length": 1.0,
   "default_lane_width": 3.5,
   "default_num_lanes": 1,
   "default_speed_limit": 50,
   "use_arc_fitting": false,
+  "use_smooth_curves": true,
+  "preserve_detail": true,
+  "curve_fitting_mode": "parampoly3",
+  "polynomial_degree": 3,
+  "curve_smoothness": 0.5,
   "coordinate_precision": 3,
   "attribute_mapping": {
     "WIDTH": "lane_width",

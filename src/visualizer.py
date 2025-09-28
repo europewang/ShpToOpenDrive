@@ -134,7 +134,7 @@ class RoadVisualizer:
         if file_path:
             try:
                 self.update_status("正在加载SHP文件...")
-                reader = ShapefileReader(file_path)
+                reader = ShapefileReader(file_path, coordinate_precision=3)
                 self.current_shp_data = reader.read_features()
                 self.update_status(f"已加载SHP文件: {os.path.basename(file_path)}")
                 messagebox.showinfo("成功", f"成功加载SHP文件\n包含 {len(self.current_shp_data)} 个要素")
@@ -370,7 +370,7 @@ class RoadVisualizer:
         """
         if self.current_shp_data:
             # 使用现有的转换器
-            converter = GeometryConverter()
+            converter = GeometryConverter(coordinate_precision=3)
             generator = OpenDriveGenerator()
             
             # 转换几何数据

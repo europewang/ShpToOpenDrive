@@ -4,7 +4,7 @@
 """
 
 from scenariogeneration import xodr
-from scenariogeneration.xodr.geometry import Line, Arc, PlanView
+from scenariogeneration.xodr.geometry import Line, Arc, ParamPoly3, PlanView
 from scenariogeneration.xodr.lane import Lane, LaneSection, Lanes
 from scenariogeneration.xodr.enumerations import LaneType
 import numpy as np
@@ -21,13 +21,20 @@ class OpenDriveGenerator:
     将转换后的几何数据生成为标准的OpenDrive XML文件。
     """
     
-    def __init__(self, name: str = "ConvertedRoad"):
+    def __init__(self, name: str = "ConvertedRoad", curve_fitting_mode: str = "polyline", 
+                 polynomial_degree: int = 3, curve_smoothness: float = 0.5):
         """初始化生成器
         
         Args:
             name: 道路网络名称
+            curve_fitting_mode: 曲线拟合模式
+            polynomial_degree: 多项式拟合阶数
+            curve_smoothness: 曲线平滑度
         """
         self.name = name
+        self.curve_fitting_mode = curve_fitting_mode
+        self.polynomial_degree = polynomial_degree
+        self.curve_smoothness = curve_smoothness
         self.odr = xodr.OpenDrive(self.name)
         
         # 设置OpenDrive版本属性
@@ -101,7 +108,7 @@ class OpenDriveGenerator:
             logger.error("车道面数据为空")
             return -1
         
-        # 计算道路参考线（使用所有车道面的平均中心线）
+        # 计算道路参考线（使用index为'0'的边界线作为planview）
         segments = self._calculate_road_reference_line(lane_surfaces)
         if not segments:
             logger.error("无法计算道路参考线")
@@ -115,7 +122,7 @@ class OpenDriveGenerator:
             planview = self._create_planview_from_segments(segments)
             
             # 创建基于车道面的车道剖面
-            lanes = self._create_lane_section_from_surfaces(lane_surfaces, road_attributes)
+            lanes = self._create_lane_section_from_surfaces(lane_surfaces, road_attributes, road_id)
             
             # 创建道路
             road = xodr.Road(road_id, planview, lanes)
@@ -132,77 +139,92 @@ class OpenDriveGenerator:
             return -1
     
     def _calculate_road_reference_line(self, lane_surfaces: List[Dict]) -> List[Dict]:
-        """计算道路参考线（所有车道面的平均中心线）
+        """计算道路参考线（使用index为'0'的边界线作为planview）
+        
+        该方法会遍历所有车道面，查找index为'0'的边界线（左边界或右边界），
+        将其坐标转换为几何段（支持直线、圆弧、样条线拟合）作为道路参考线。
+        如果未找到index为'0'的边界线，则回退到使用第一个车道面的中心线。
         
         Args:
-            lane_surfaces: 车道面数据列表
+            lane_surfaces: 车道面数据列表，每个车道面包含left_boundary和right_boundary
             
         Returns:
-            List[Dict]: 道路参考线的几何段
+            List[Dict]: 道路参考线的几何段，用于生成OpenDRIVE的planView
+            
+        Note:
+            - 优先查找index为'0'的左边界线
+            - 如果左边界线index不为'0'，则查找index为'0'的右边界线
+            - 边界线坐标通过GeometryConverter转换为标准化几何段
         """
         try:
             if not lane_surfaces:
                 return []
             
-            # 收集所有车道面的中心线坐标
-            all_center_coords = []
+            # 查找所有边界线中index为'0'的边界线
+            reference_boundary = None
+            reference_coords = None
+            
+            logger.info("查找index为'0'的边界线作为planview参考线")
+            
+            # 遍历所有车道面，查找index为'0'的边界线
             for surface in lane_surfaces:
-                if 'center_line' in surface:
-                    # 使用已有的中心线坐标
-                    center_coords = surface['center_line']
-                    if center_coords:
-                        all_center_coords.append(center_coords)
-                elif 'left_boundary' in surface and 'right_boundary' in surface:
-                    # 如果没有center_line，从边界计算中心线
-                    left_coords = surface['left_boundary']['coordinates']
-                    right_coords = surface['right_boundary']['coordinates']
-                    center_coords = self._calculate_center_line_coords(left_coords, right_coords)
-                    if center_coords:
-                        all_center_coords.append(center_coords)
+                # 检查左边界
+                if ('left_boundary' in surface and 
+                    surface['left_boundary'].get('index') == '0'):
+                    reference_boundary = surface['left_boundary']
+                    reference_coords = surface['left_boundary']['coordinates']
+                    logger.info(f"找到index为'0'的左边界线，坐标点数: {len(reference_coords)}")
+                    break
+                
+                # 检查右边界
+                if ('right_boundary' in surface and 
+                    surface['right_boundary'].get('index') == '0'):
+                    reference_boundary = surface['right_boundary']
+                    reference_coords = surface['right_boundary']['coordinates']
+                    logger.info(f"找到index为'0'的右边界线，坐标点数: {len(reference_coords)}")
+                    break
             
-            if not all_center_coords:
-                logger.warning("没有找到有效的车道面中心线数据")
-                return []
+            if not reference_coords:
+                logger.warning("未找到index为'0'的边界线，回退到使用第一个车道面的中心线")
+                # 回退方案：使用第一个车道面的中心线
+                reference_surface = lane_surfaces[0]
+                if 'center_line' in reference_surface:
+                    reference_coords = reference_surface['center_line']
+                elif ('left_boundary' in reference_surface and 
+                      'right_boundary' in reference_surface):
+                    left_coords = reference_surface['left_boundary']['coordinates']
+                    right_coords = reference_surface['right_boundary']['coordinates']
+                    reference_coords = self._calculate_center_line_coords(left_coords, right_coords)
+                
+                if not reference_coords:
+                    logger.error("无法获取有效的参考线坐标")
+                    return []
             
-            # 如果只有一个车道面，直接使用其中心线
-            if len(all_center_coords) == 1:
-                logger.info("只有一个车道面，使用其中心线作为道路参考线")
-                center_coords = lane_surfaces[0].get('center_line', [])
-                # 将坐标转换为几何段
-                from geometry_converter import GeometryConverter
-                converter = GeometryConverter(tolerance=0.5, smooth_curves=True)
-                return converter.convert_road_geometry(center_coords)
-            
-            # 计算平均中心线
-            logger.info(f"计算 {len(all_center_coords)} 个车道面的平均中心线作为道路参考线")
-            avg_center_coords = self._calculate_average_center_line(all_center_coords)
-            
-            if not avg_center_coords:
-                logger.warning("平均中心线计算失败，使用第一个车道面的中心线")
-                center_coords = lane_surfaces[0].get('center_line', [])
-                if center_coords:
-                    from geometry_converter import GeometryConverter
-                    converter = GeometryConverter(tolerance=0.5, smooth_curves=True)
-                    return converter.convert_road_geometry(center_coords)
-                return []
-            
-            # 将平均中心线转换为几何段
+            # 将边界线坐标转换为几何段（高精度拟合，完全按照index=0边界线的折线形状）
             from geometry_converter import GeometryConverter
-            converter = GeometryConverter(tolerance=0.5, smooth_curves=True)
-            segments = converter.convert_road_geometry(avg_center_coords)
+            # 使用更高精度的参数：更小的容差，保留细节，支持曲线拟合模式
+            converter = GeometryConverter(
+                tolerance=0.1, 
+                smooth_curves=False, 
+                preserve_detail=True,
+                curve_fitting_mode=getattr(self, 'curve_fitting_mode', 'polyline'),
+                polynomial_degree=getattr(self, 'polynomial_degree', 3),
+                curve_smoothness=getattr(self, 'curve_smoothness', 0.5),
+                coordinate_precision=getattr(self, 'coordinate_precision', 3)
+            )
+            segments = converter.convert_road_geometry(reference_coords)
             
-            logger.info(f"道路参考线计算完成，包含 {len(segments)} 个几何段")
-            return segments
+            logger.info(f"使用高精度参数转换边界线：容差=0.1m, 保留细节=True, 原始坐标点数={len(reference_coords)}")
+            
+            if segments:
+                logger.info(f"道路参考线计算完成，使用index为'0'的边界线，包含 {len(segments)} 个几何段")
+                return segments
+            else:
+                logger.error("边界线坐标转换为几何段失败")
+                return []
             
         except Exception as e:
             logger.error(f"计算道路参考线失败: {e}")
-            # 回退到使用第一个车道面
-            if lane_surfaces:
-                center_coords = lane_surfaces[0].get('center_line', [])
-                if center_coords:
-                    from geometry_converter import GeometryConverter
-                    converter = GeometryConverter(tolerance=0.5, smooth_curves=True)
-                    return converter.convert_road_geometry(center_coords)
             return []
     
     def _extract_coordinates_from_segments(self, segments: List[Dict]) -> List[Tuple[float, float]]:
@@ -214,22 +236,10 @@ class OpenDriveGenerator:
         Returns:
             List[Tuple[float, float]]: 坐标点列表
         """
-        coords = []
-        for segment in segments:
-            if 'start_point' in segment:
-                coords.append((segment['start_point']['x'], segment['start_point']['y']))
-            if 'end_point' in segment:
-                coords.append((segment['end_point']['x'], segment['end_point']['y']))
-        
-        # 去重相邻重复点
-        if len(coords) > 1:
-            unique_coords = [coords[0]]
-            for i in range(1, len(coords)):
-                if coords[i] != coords[i-1]:
-                    unique_coords.append(coords[i])
-            return unique_coords
-        
-        return coords
+        # 使用geometry_converter的重建方法
+        from geometry_converter import GeometryConverter
+        converter = GeometryConverter(coordinate_precision=getattr(self, 'coordinate_precision', 3))
+        return converter._reconstruct_reference_line(segments)
     
     def _calculate_center_line_coords(self, left_coords: List[Tuple[float, float]], 
                                     right_coords: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
@@ -270,18 +280,70 @@ class OpenDriveGenerator:
         if not all_center_coords:
             return []
         
-        # 找到最短的中心线长度
-        min_length = min(len(coords) for coords in all_center_coords)
-        if min_length == 0:
+        # 找到最长的中心线长度
+        max_length = max(len(coords) for coords in all_center_coords)
+        if max_length == 0:
             return []
         
+        # 对所有中心线进行插值，使其长度与最长的一致
+        interpolated_coords = []
+        for coords in all_center_coords:
+            if len(coords) == max_length:
+                # 已经是最长的，直接使用
+                interpolated_coords.append(coords)
+            else:
+                # 需要插值到最长长度
+                interpolated = self._interpolate_to_target_length(coords, max_length)
+                interpolated_coords.append(interpolated)
+        
+        # 计算平均坐标
         avg_coords = []
-        for i in range(min_length):
-            avg_x = sum(coords[i][0] for coords in all_center_coords) / len(all_center_coords)
-            avg_y = sum(coords[i][1] for coords in all_center_coords) / len(all_center_coords)
+        for i in range(max_length):
+            avg_x = sum(coords[i][0] for coords in interpolated_coords) / len(interpolated_coords)
+            avg_y = sum(coords[i][1] for coords in interpolated_coords) / len(interpolated_coords)
             avg_coords.append((avg_x, avg_y))
         
         return avg_coords
+    
+    def _interpolate_to_target_length(self, coords: List[Tuple[float, float]], target_length: int) -> List[Tuple[float, float]]:
+        """将坐标列表插值到目标长度
+        
+        Args:
+            coords: 原始坐标列表
+            target_length: 目标长度
+            
+        Returns:
+            List[Tuple[float, float]]: 插值后的坐标列表
+        """
+        if len(coords) <= 1 or target_length <= 1:
+            return coords
+        
+        import numpy as np
+        from scipy import interpolate
+        
+        # 计算原始坐标的累积距离
+        distances = [0]
+        for i in range(1, len(coords)):
+            dist = ((coords[i][0] - coords[i-1][0])**2 + (coords[i][1] - coords[i-1][1])**2)**0.5
+            distances.append(distances[-1] + dist)
+        
+        # 创建目标距离数组
+        total_distance = distances[-1]
+        target_distances = np.linspace(0, total_distance, target_length)
+        
+        # 分别对x和y坐标进行插值
+        x_coords = [coord[0] for coord in coords]
+        y_coords = [coord[1] for coord in coords]
+        
+        # 使用线性插值
+        f_x = interpolate.interp1d(distances, x_coords, kind='linear', bounds_error=False, fill_value='extrapolate')
+        f_y = interpolate.interp1d(distances, y_coords, kind='linear', bounds_error=False, fill_value='extrapolate')
+        
+        # 生成插值后的坐标
+        interpolated_x = f_x(target_distances)
+        interpolated_y = f_y(target_distances)
+        
+        return list(zip(interpolated_x, interpolated_y))
     
     def _create_planview_from_segments(self, segments: List[Dict]) -> xodr.PlanView:
         """从几何段创建平面视图
@@ -308,6 +370,22 @@ class OpenDriveGenerator:
             elif segment['type'] == 'arc':
                 # 创建圆弧段
                 geometry = Arc(curvature=segment['curvature'], length=segment['length'])
+                planview.add_geometry(geometry, heading=segment['hdg'])
+                
+            elif segment['type'] == 'parampoly3':
+                # 创建参数化三次多项式段
+                geometry = ParamPoly3(
+                    au=segment['au'],
+                    bu=segment['bu'], 
+                    cu=segment['cu'],
+                    du=segment['du'],
+                    av=segment['av'],
+                    bv=segment['bv'],
+                    cv=segment['cv'],
+                    dv=segment['dv'],
+                    prange='normalized',
+                    length=segment['length']
+                )
                 planview.add_geometry(geometry, heading=segment['hdg'])
                 
             else:
@@ -360,12 +438,13 @@ class OpenDriveGenerator:
         return lanes
     
     def _create_lane_section_from_surfaces(self, lane_surfaces: List[Dict], 
-                                         attributes: Dict = None) -> xodr.Lanes:
-        """从车道面数据创建车道剖面
+                                         attributes: Dict = None, road_id: int = None) -> xodr.Lanes:
+        """从车道面数据创建车道剖面（所有车道都在planview右侧）
         
         Args:
             lane_surfaces: 车道面数据列表
             attributes: 道路属性
+            road_id: 道路ID（用于日志跟踪）
             
         Returns:
             xodr.Lanes: 车道对象
@@ -376,13 +455,23 @@ class OpenDriveGenerator:
         # 创建车道段
         lane_section = xodr.LaneSection(0, xodr.standard_lane())
         
-        # 为每个车道面创建一个左侧车道
+        # 将所有车道面都创建为右侧车道（包括index为0的车道面）
+        logger.info(f"创建车道剖面 (Road ID: {road_id})：总共{len(lane_surfaces)}个车道面，全部创建为右侧车道")
+        
         for i, surface in enumerate(lane_surfaces):
+                
             # 创建车道
             lane = xodr.Lane(lane_type=xodr.LaneType.driving)
             
+            # 计算车道ID（右侧车道为负数，从-1开始）
+            lane_id = -(i + 1)
+            
             # 处理车道宽度变化（从宽度变化数据中获取）
             width_profile = surface.get('width_profile', [])
+            surface_id = surface.get('surface_id', f'surface_{i}')
+            
+            logger.info(f"处理车道 (Road ID: {road_id}, Lane ID: {lane_id}, Surface ID: {surface_id})")
+            
             if width_profile:
                 # 检查是否为变宽车道
                 widths = [wp['width'] for wp in width_profile]
@@ -390,27 +479,89 @@ class OpenDriveGenerator:
                 max_width = max(widths)
                 width_change = max_width - min_width
                 
-                if width_change > 0.1:  # 宽度变化超过0.1米认为是变宽车道
-                    logger.info(f"检测到变宽车道 {surface.get('surface_id', i)}: 最小宽度={min_width:.2f}m, 最大宽度={max_width:.2f}m")
+                # 详细记录宽度数据
+                logger.info(f"  宽度数据: {len(width_profile)}个采样点, 最小={min_width:.3f}m, 最大={max_width:.3f}m, 变化={width_change:.3f}m")
+                
+                # 检查是否有宽度为0的情况
+                zero_widths = [wp for wp in width_profile if wp['width'] <= 0.001]
+                if zero_widths:
+                    logger.warning(f"  发现{len(zero_widths)}个异常宽度点 (Road ID: {road_id}, Lane ID: {lane_id}):")
+                    for zw in zero_widths[:5]:  # 只显示前5个
+                        logger.warning(f"    s={zw['s']:.2f}m, width={zw['width']:.6f}")
+                
+                # 更严格的变宽车道检测：考虑宽度变化幅度和相对变化率
+                # 当min_width为0时，使用平均宽度作为基准计算变化率
+                if min_width > 0:
+                    width_change_ratio = width_change / min_width
+                else:
+                    # 计算平均宽度作为基准
+                    avg_width = sum(wp['width'] for wp in width_profile) / len(width_profile) if width_profile else 0
+                    width_change_ratio = width_change / avg_width if avg_width > 0 else float('inf')  # 如果平均宽度也为0，设为无穷大表示显著变化
+                
+                if width_change > 0.1 and width_change_ratio > 0.03:  # 绝对变化>0.1米且相对变化>3%
+                    logger.info(f"  检测到变宽车道: 变化率={width_change_ratio:.1%}, 原始宽度点数={len(width_profile)}")
                     
-                    # 为变宽车道创建多个width元素
-                    for j, wp in enumerate(width_profile):
-                        lane.add_lane_width(a=wp['width'], soffset=wp['s'])
-                        
-                        if j == 0:
-                            logger.info(f"  起始宽度: s={wp['s']:.2f}m, width={wp['width']:.2f}m")
-                        elif j == len(width_profile) - 1:
-                            logger.info(f"  结束宽度: s={wp['s']:.2f}m, width={wp['width']:.2f}m")
+                    # 过滤多项式段，只保留显著变化的段
+                    filtered_profile = self._filter_significant_width_changes(width_profile)
+                    logger.info(f"  过滤后宽度点数: {len(filtered_profile)} (Road ID: {road_id}, Lane ID: {lane_id})")
+                    
+                    # 限制多项式段数量，避免过拟合
+                    max_segments = min(8, len(filtered_profile))  # 最多8个多项式段
+                    if len(filtered_profile) > max_segments:
+                        logger.warning(f"  宽度变化段过多，将从{len(filtered_profile)}段简化为{max_segments}段")
+                    
+                    segment_count = 0
+                    for j, wp in enumerate(filtered_profile):
+                        if segment_count >= max_segments:
+                            break
+                            
+                        if 'polynomial' in wp:
+                            poly = wp['polynomial']
+                            lane.add_lane_width(
+                                a=poly['a'], 
+                                b=poly['b'], 
+                                c=poly['c'], 
+                                d=poly['d'], 
+                                soffset=wp['s']
+                            )
+                            segment_count += 1
+                            if j == 0:
+                                logger.info(f"    起始多项式段: s={wp['s']:.2f}m, a={poly['a']:.3f}, b={poly['b']:.3f}, c={poly['c']:.3f}, d={poly['d']:.3f}")
+                        else:
+                            # 回退到常数宽度
+                            lane.add_lane_width(a=wp['width'], soffset=wp['s'])
+                            segment_count += 1
+                            
+                        if j == len(filtered_profile) - 1:
+                            logger.info(f"    结束宽度: s={wp['s']:.2f}m, width={wp['width']:.2f}m")
+                    
+                    logger.info(f"    实际使用{segment_count}个多项式段（原始{len(width_profile)}个，过滤后{len(filtered_profile)}个，限制{max_segments}个）")
                 else:
                     # 等宽车道，使用第一个宽度值
                     lane_width = width_profile[0]['width']
                     lane.add_lane_width(a=lane_width, soffset=0)
-                    logger.info(f"等宽车道 {surface.get('surface_id', i)}: 宽度={lane_width:.2f}m")
+                    logger.info(f"  等宽车道: 宽度={lane_width:.3f}m")
+                    
+                    # 特别检查宽度为0的情况
+                    if lane_width <= 0.001:
+                        logger.error(f"  异常！车道宽度为0 (Road ID: {road_id}, Lane ID: {lane_id}, Surface ID: {surface_id})")
+                        logger.error(f"    宽度数据详情: {width_profile[:3]}...")  # 显示前3个数据点
+                        
+                        # 尝试使用后续非零宽度值
+                        valid_widths = [wp['width'] for wp in width_profile if wp['width'] > 0.001]
+                        if valid_widths:
+                            lane_width = min(valid_widths)  # 使用最小的有效宽度
+                            lane.add_lane_width(a=lane_width, soffset=0)
+                            logger.warning(f"    已修正为最小有效宽度: {lane_width:.3f}m")
+                        else:
+                            # 如果所有宽度都为0，跳过此车道
+                            logger.error(f"    所有宽度数据都为0，跳过此车道")
+                            continue
             else:
                 # 默认宽度
                 lane_width = attributes.get('lane_width', 3.5) if attributes else 3.5
                 lane.add_lane_width(a=lane_width, soffset=0)
-                logger.warning(f"车道面 {surface.get('surface_id', i)} 缺少宽度信息，使用默认宽度{lane_width:.2f}m")
+                logger.warning(f"  车道面缺少宽度信息，使用默认宽度{lane_width:.2f}m (Road ID: {road_id}, Lane ID: {lane_id})")
             
             # 添加车道标线
             road_mark = xodr.RoadMark(
@@ -420,10 +571,12 @@ class OpenDriveGenerator:
             )
             lane.add_roadmark(road_mark)
             
-            # 添加到左侧车道（id从0开始递增）
-            lane_section.add_left_lane(lane)
+            # 添加到右侧车道（所有车道都在planview右侧）
+            lane_section.add_right_lane(lane)
+            logger.info(f"  车道已添加为右侧车道 (Road ID: {road_id}, Lane ID: {lane_id}, Surface ID: {surface_id})")
         
         lanes.add_lanesection(lane_section)
+        logger.info(f"车道剖面创建完成 (Road ID: {road_id})，包含{len(lane_surfaces)}个右侧车道")
         return lanes
     
     def create_multiple_roads(self, roads_data: List[Dict]) -> List[int]:
@@ -447,6 +600,45 @@ class OpenDriveGenerator:
         
         logger.info(f"成功创建 {len(road_ids)} 条道路")
         return road_ids
+    
+    def _filter_significant_width_changes(self, width_profile: List[Dict], 
+                                        change_threshold: float = 0.05) -> List[Dict]:
+        """过滤显著的宽度变化段，减少多项式段数量
+        
+        Args:
+            width_profile: 原始宽度变化数据
+            change_threshold: 宽度变化阈值（米）
+            
+        Returns:
+            List[Dict]: 过滤后的宽度变化数据
+        """
+        if len(width_profile) <= 2:
+            return width_profile
+        
+        filtered = [width_profile[0]]  # 保留第一个点
+        
+        for i in range(1, len(width_profile) - 1):
+            current_width = width_profile[i]['width']
+            prev_width = filtered[-1]['width']
+            next_width = width_profile[i + 1]['width']
+            
+            # 检查宽度变化是否显著
+            width_change_prev = abs(current_width - prev_width)
+            width_change_next = abs(next_width - current_width)
+            
+            # 检查是否为转折点（宽度变化方向改变）
+            is_turning_point = ((current_width > prev_width and current_width > next_width) or
+                              (current_width < prev_width and current_width < next_width))
+            
+            # 保留显著变化点或转折点
+            if (width_change_prev > change_threshold or 
+                width_change_next > change_threshold or 
+                is_turning_point):
+                filtered.append(width_profile[i])
+        
+        filtered.append(width_profile[-1])  # 保留最后一个点
+        
+        return filtered
     
     def add_road_connections(self, connections: List[Dict]):
         """添加道路连接（简化版本）

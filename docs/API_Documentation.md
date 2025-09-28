@@ -25,6 +25,162 @@ src/
 └── opendrive_generator.py  # OpenDrive 生成模块
 ```
 
+## 方法调用关系与功能概述
+
+### 主要转换流程
+
+```
+main.py (ShapefileToOpenDriveConverter)
+    ↓
+    ├── ShapefileReader.load_shapefile()           # 加载shapefile文件
+    ├── ShapefileReader.extract_road_geometries()  # 提取道路几何数据
+    │   └── ShapefileReader._is_lane_shapefile()   # 检测文件格式
+    │   └── ShapefileReader.extract_lane_geometries() # Lane格式处理
+    ├── ShapefileReader.convert_to_local_coordinates() # 坐标转换
+    ↓
+    ├── GeometryConverter.convert_road_geometry()  # 几何转换
+    │   ├── GeometryConverter.fit_line_segments()  # 直线段拟合
+    │   └── GeometryConverter.fit_arc_segments()   # 圆弧段拟合
+    ↓
+    ├── OpenDriveGenerator.create_road_from_segments() # 创建道路
+    │   └── OpenDriveGenerator._create_planview_from_segments() # 创建平面视图
+    └── OpenDriveGenerator.generate_file()         # 生成文件
+```
+
+### 核心模块功能说明
+
+#### 1. ShapefileReader (数据读取层)
+**主要职责：** 读取和预处理Shapefile数据
+- `load_shapefile()` - 文件加载和验证
+- `extract_road_geometries()` - 提取道路几何（自动检测格式）
+- `extract_lane_geometries()` - 专门处理Lane.shp格式
+- `convert_to_local_coordinates()` - 坐标系转换
+- `_is_lane_shapefile()` - 格式检测（内部方法）
+
+#### 2. GeometryConverter (几何处理层)
+**主要职责：** 将复杂几何转换为OpenDrive标准几何
+- `convert_road_geometry()` - 主要转换入口
+- `fit_line_segments()` - 直线段拟合（使用Douglas-Peucker算法）
+- `fit_arc_segments()` - 圆弧段拟合
+- `convert_lane_surface_geometry()` - 车道面几何转换
+- `_calculate_center_line()` - 中心线计算（内部方法）
+
+#### 3. OpenDriveGenerator (文件生成层)
+**主要职责：** 生成标准OpenDrive文件
+- `create_road_from_segments()` - 从几何段创建道路
+- `create_road_from_lane_surfaces()` - 从车道面创建道路
+- `generate_file()` - 生成最终XML文件
+- `_create_planview_from_segments()` - 创建平面视图（内部方法）
+- `_calculate_road_reference_line()` - 计算道路参考线（内部方法）
+
+### 方法间依赖关系
+
+#### 数据流向
+1. **Shapefile → 原始几何数据**
+   - `ShapefileReader.load_shapefile()` → `extract_road_geometries()`
+   
+2. **原始几何 → 标准几何段**
+   - `GeometryConverter.convert_road_geometry()` → `fit_line_segments()` / `fit_arc_segments()`
+   
+3. **几何段 → OpenDrive道路**
+   - `OpenDriveGenerator.create_road_from_segments()` → `_create_planview_from_segments()`
+   
+4. **道路对象 → XML文件**
+   - `OpenDriveGenerator.generate_file()`
+
+#### 格式检测与分支处理
+```
+ShapefileReader.extract_road_geometries()
+    ↓
+    ├── _is_lane_shapefile() == True
+    │   └── extract_lane_geometries()  # Lane格式分支
+    │       └── _build_lanes_from_boundaries()
+    └── _is_lane_shapefile() == False
+        └── 传统道路格式处理           # 传统格式分支
+```
+
+#### 车道面处理流程（Lane.shp专用）
+```
+ShapefileReader.extract_lane_geometries()
+    ↓
+    ├── _build_lanes_from_boundaries()     # 构建车道面
+    │   ├── _calculate_center_line()       # 计算中心线
+    │   ├── _calculate_width_profile()     # 计算宽度变化
+    │   └── _merge_boundary_attributes()   # 合并属性
+    ↓
+GeometryConverter.convert_lane_surface_geometry()
+    ↓
+OpenDriveGenerator.create_road_from_lane_surfaces()
+    └── _calculate_road_reference_line()   # 计算道路参考线
+```
+
+### 关键算法与工具方法
+
+#### 几何算法
+- `GeometryConverter._douglas_peucker()` - 线简化算法
+- `GeometryConverter._fit_circle()` - 圆拟合算法
+- `GeometryConverter._detect_curve_segment()` - 弯曲段检测
+- `GeometryConverter._calculate_width_profile()` - 车道宽度变化计算（基于参考线）
+- `GeometryConverter._calculate_width_profile_simple()` - 简化车道宽度计算（回退方案）
+- `GeometryConverter._reconstruct_reference_line()` - 从几何段重建参考线
+- `GeometryConverter._get_reference_point_at_s()` - 获取参考线上指定s位置的点和方向
+- `GeometryConverter._find_closest_point()` - 查找最接近目标点的坐标
+- `GeometryConverter._calculate_perpendicular_width()` - 计算垂直于参考线的车道宽度
+
+#### 道路参考线计算 (v1.3.0新增)
+- `OpenDriveGenerator._calculate_road_reference_line()` - 基于边界线index的planview参考线计算
+- `OpenDriveGenerator._calculate_center_line_coords()` - 动态计算车道面中心线坐标
+- `OpenDriveGenerator._extract_coordinates_from_segments()` - 从几何段提取坐标序列
+- `OpenDriveGenerator._calculate_average_center_line()` - 计算多个车道面的平均中心线
+- `OpenDriveGenerator._interpolate_to_target_length()` - 插值到目标长度
+
+#### 坐标处理
+- `ShapefileReader.convert_to_utm()` - UTM坐标转换
+- `ShapefileReader.convert_to_local_coordinates()` - 局部坐标转换
+- `GeometryConverter._interpolate_coordinates()` - 坐标插值
+
+#### 验证与统计
+- `GeometryConverter.validate_geometry_continuity()` - 几何连续性验证
+- `OpenDriveGenerator.validate_opendrive()` - OpenDrive格式验证
+- `OpenDriveGenerator.get_statistics()` - 统计信息获取
+
+### 错误处理与日志
+所有主要方法都包含：
+- 输入参数验证
+- 异常捕获和处理
+- 详细的日志记录
+- 失败时的回退机制
+
+## 新增方法详细说明
+
+### 车道宽度计算算法改进
+
+#### `_calculate_width_profile()`
+**功能**：基于参考线几何段计算准确的车道宽度变化
+**算法原理**：
+1. 重建参考线坐标序列
+2. 沿参考线弧长计算s坐标
+3. 计算垂直于参考线方向的车道宽度
+4. 生成符合OpenDRIVE标准的宽度数据
+
+**关键改进**：
+- 使用参考线几何段进行精确的s坐标计算
+- 考虑道路方向，计算垂直距离而非直线距离
+- 支持复杂几何形状（直线、螺旋线、圆弧）
+
+#### `_reconstruct_reference_line()`
+**功能**：从几何段重建完整的参考线坐标序列
+**输入**：几何段列表（包含直线、螺旋线、圆弧）
+**输出**：参考线坐标点序列
+
+#### `_get_reference_point_at_s()`
+**功能**：获取参考线上指定s位置的点坐标和切线方向
+**算法**：基于几何段类型进行精确插值计算
+
+#### `_calculate_perpendicular_width()`
+**功能**：计算垂直于参考线方向的车道宽度
+**算法**：使用向量投影计算垂直距离，确保宽度测量的准确性
+
 ---
 
 ## 1. shp_reader.py - Shapefile 读取模块
@@ -642,6 +798,41 @@ create_road_from_lane_surfaces(self, lane_surfaces: List[Dict], road_attributes:
 
 **特点:**
 - 支持变宽车道的精确描述
+- 使用index='0'的边界线作为planview参考线（v1.3.0更新）
+
+##### _calculate_road_reference_line() (v1.3.0新增)
+```python
+_calculate_road_reference_line(self, lane_surfaces: List[Dict]) -> List[Tuple[float, float]]
+```
+**参数:**
+- `lane_surfaces` (List[Dict]): 车道面数据列表
+
+**返回值:** List[Tuple[float, float]] - 参考线坐标序列
+
+**功能:** 计算道路参考线，优先使用index='0'的边界线作为planview参考线
+
+**算法策略:**
+1. **优先策略**: 查找所有车道面中index='0'的左边界线
+2. **次选策略**: 如果没有找到左边界，查找index='0'的右边界线
+3. **回退策略1**: 如果没有找到index='0'的边界线，使用第一个车道面的center_line
+4. **回退策略2**: 如果center_line不存在，动态计算第一个车道面的中心线
+
+**实现细节:**
+- 遍历所有车道面的left_boundary和right_boundary
+- 检查边界线的index属性是否为'0'（字符串比较）
+- 优先使用左边界线，因为通常更符合道路设计标准
+- 将选中的边界线坐标通过GeometryConverter转换为几何段
+- 确保参考线的几何连续性和方向一致性
+
+**日志记录:**
+- 记录找到的index='0'边界线类型（左边界/右边界）
+- 记录回退到中心线的情况
+- 记录参考线坐标点数量和长度信息
+
+**注意事项:**
+- 该方法是内部方法，由create_road_from_lane_surfaces()调用
+- 确保输入的lane_surfaces包含完整的边界线信息
+- 边界线的index字段必须存在且为字符串类型
 - 自动计算平均中心线作为道路参考线
 - 智能处理车道宽度变化
 

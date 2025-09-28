@@ -11,6 +11,76 @@ class App {
         this.init();
     }
     
+    // 组织Shapefile文件集，自动包含同名的相关文件
+    organizeShapefileSet(files) {
+        const fileMap = new Map();
+        const shapefileExtensions = ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx'];
+        
+        // 将文件按基础名称分组
+        files.forEach(file => {
+            const fileName = file.name;
+            const lastDotIndex = fileName.lastIndexOf('.');
+            if (lastDotIndex === -1) return;
+            
+            const baseName = fileName.substring(0, lastDotIndex).toLowerCase();
+            const extension = fileName.substring(lastDotIndex).toLowerCase();
+            
+            if (shapefileExtensions.includes(extension)) {
+                if (!fileMap.has(baseName)) {
+                    fileMap.set(baseName, []);
+                }
+                fileMap.get(baseName).push(file);
+            }
+        });
+        
+        // 找到包含.shp文件的文件组
+        let selectedFileSet = [];
+        for (const [baseName, fileGroup] of fileMap) {
+            const hasShpFile = fileGroup.some(file => 
+                file.name.toLowerCase().endsWith('.shp')
+            );
+            
+            if (hasShpFile) {
+                selectedFileSet = fileGroup;
+                console.log(`自动选择Shapefile文件集: ${baseName}`, fileGroup.map(f => f.name));
+                break;
+            }
+        }
+        
+        if (selectedFileSet.length === 0) {
+             this.showError('未找到有效的Shapefile文件集');
+             return [];
+         }
+         
+         // 检查必需的文件
+         const hasShp = selectedFileSet.some(f => f.name.toLowerCase().endsWith('.shp'));
+         const hasShx = selectedFileSet.some(f => f.name.toLowerCase().endsWith('.shx'));
+         const hasDbf = selectedFileSet.some(f => f.name.toLowerCase().endsWith('.dbf'));
+         
+         // 检查所有必需的文件（根据后端要求）
+         if (!hasShp) {
+             this.showError('缺少必需的.shp文件');
+             return [];
+         }
+         
+         if (!hasShx) {
+             this.showError('缺少必需的.shx文件');
+             return [];
+         }
+         
+         if (!hasDbf) {
+             this.showError('缺少必需的.dbf文件');
+             return [];
+         }
+         
+         // 显示文件组织信息
+         const baseName = selectedFileSet[0].name.substring(0, selectedFileSet[0].name.lastIndexOf('.'));
+         const fileNames = selectedFileSet.map(f => f.name).join(', ');
+         this.updateStatus(`已自动组织Shapefile文件集: ${baseName} (${selectedFileSet.length}个文件)`);
+         
+         return selectedFileSet;
+    }
+    
     init() {
         // 初始化3D查看器
         this.viewer = new Web3DViewer('viewer');
@@ -221,19 +291,29 @@ class App {
         // 检查文件类型
         const hasShp = files.some(file => file.name.toLowerCase().endsWith('.shp'));
         const hasXodr = files.some(file => file.name.toLowerCase().endsWith('.xodr'));
+        const hasObj = files.some(file => file.name.toLowerCase().endsWith('.obj'));
         
-        if (!hasShp && !hasXodr) {
-            this.showError('请选择SHP文件(.shp)或OpenDrive文件(.xodr)');
+        if (!hasShp && !hasXodr && !hasObj) {
+            this.showError('请选择SHP文件(.shp)、OpenDrive文件(.xodr)或OBJ文件(.obj)');
             return;
         }
         
-        if (hasShp && hasXodr) {
-            this.showError('请只选择一种文件类型：SHP文件或OpenDrive文件');
+        const fileTypeCount = [hasShp, hasXodr, hasObj].filter(Boolean).length;
+        if (fileTypeCount > 1) {
+            this.showError('请只选择一种文件类型：SHP文件、OpenDrive文件或OBJ文件');
             return;
         }
         
-        // 上传文件
-        this.uploadFiles(files, hasXodr ? 'xodr' : 'shp');
+        // 处理不同类型的文件
+        if (hasObj) {
+            this.loadObjFile(files[0]);
+        } else if (hasShp) {
+            // 对于SHP文件，自动组织同名的相关文件
+            const organizedFiles = this.organizeShapefileSet(files);
+            this.uploadFiles(organizedFiles, 'shp');
+        } else {
+            this.uploadFiles(files, 'xodr');
+        }
     }
     
     async uploadFiles(files, fileType = 'shp') {
@@ -242,9 +322,15 @@ class App {
         
         try {
             const formData = new FormData();
-            files.forEach(file => {
-                formData.append('files', file);
-            });
+            if (fileType === 'xodr') {
+                // XODR文件只上传单个文件
+                formData.append('file', files[0]);
+            } else {
+                // SHP文件可能包含多个相关文件
+                files.forEach(file => {
+                    formData.append('files', file);
+                });
+            }
             
             const apiEndpoint = fileType === 'xodr' ? '/api/upload_xodr' : '/api/upload_shp';
             const response = await fetch(apiEndpoint, {
@@ -255,22 +341,33 @@ class App {
             const data = await response.json();
             
             if (data.success) {
-                // 清空当前画布
-                this.viewer.clearRoads();
-                
-                // 加载到3D查看器
-                this.viewer.loadGeoJSON(data.data);
-                
-                // 自动调整视角到可视范围
-                setTimeout(() => {
-                    this.viewer.fitCameraToRoads();
-                }, 100); // 稍微延迟确保渲染完成
-                
-                // 更新文件信息
-                this.updateFileInfo(data.data, data.filename, fileType);
-                
                 this.currentFile = data.filename;
-                this.updateStatus(`成功上传并加载: ${data.message}`);
+                this.currentFileType = fileType;
+                
+                if (fileType === 'xodr') {
+                    // XODR文件自动转换为OBJ并显示3D模型
+                    this.updateStatus('XODR文件上传成功，正在转换为3D模型...');
+                    await this.convertAndLoadXodrAsObj(files[0]);
+                } else {
+                    // SHP文件显示为线条
+                    // 清空当前画布
+                    this.viewer.clearRoads();
+                    
+                    // 加载到3D查看器
+                    this.viewer.loadGeoJSON(data.data);
+                    
+                    // 获取坐标偏移量
+                    this.fetchCoordinateOffset();
+                    
+                    // 自动调整视角到可视范围
+                    setTimeout(() => {
+                        this.viewer.fitCameraToRoads();
+                    }, 100);
+                    
+                    // 更新文件信息
+                    this.updateFileInfo(data.data, data.filename, fileType);
+                    this.updateStatus(`成功上传并加载: ${data.message}`);
+                }
             } else {
                 throw new Error(data.error || '上传失败');
             }
@@ -278,6 +375,170 @@ class App {
             console.error('上传文件失败:', error);
             this.showError('上传失败: ' + error.message);
             this.updateStatus('上传失败');
+        } finally {
+            this.showLoading(false);
+            // 清空文件输入
+            document.getElementById('fileInput').value = '';
+        }
+    }
+    
+    async fetchCoordinateOffset() {
+        try {
+            const response = await fetch('/api/get_coordinate_offset');
+            const data = await response.json();
+            
+            if (data.success && data.coordinate_offset) {
+                const offset = data.coordinate_offset;
+                console.log('获取到坐标偏移量:', offset);
+                
+                // 设置到3D查看器
+                this.viewer.setCoordinateOffset(offset.x, offset.y);
+            } else {
+                console.warn('无法获取坐标偏移量:', data.error);
+            }
+        } catch (error) {
+            console.error('获取坐标偏移量失败:', error);
+        }
+    }
+    
+    showXodrToObjOption() {
+        // 检查是否已经有转换按钮
+        if (document.getElementById('convertToObjBtn')) {
+            return;
+        }
+        
+        // 创建转换按钮
+        const convertBtn = document.createElement('button');
+        convertBtn.id = 'convertToObjBtn';
+        convertBtn.className = 'btn btn-success';
+        convertBtn.textContent = '转换为OBJ格式';
+        convertBtn.style.marginLeft = '10px';
+        convertBtn.onclick = () => this.convertXodrToObj();
+        
+        // 添加到控制面板
+        const controls = document.querySelector('.controls');
+        controls.appendChild(convertBtn);
+    }
+    
+    async convertAndLoadXodrAsObj(xodrFile) {
+        try {
+            // 清空当前画布
+            this.viewer.clearRoads();
+            
+            const formData = new FormData();
+            formData.append('file', xodrFile);
+            
+            const response = await fetch('/api/convert_xodr_to_obj', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                // 获取转换后的OBJ文件
+                const blob = await response.blob();
+                const objFile = new File([blob], this.currentFile.replace('.xodr', '.obj'), {
+                    type: 'application/octet-stream'
+                });
+                
+                // 直接加载OBJ文件到3D查看器
+                this.viewer.loadOBJ(objFile);
+                
+                // 更新文件信息
+                this.updateFileInfo({
+                    type: 'OBJ (从XODR转换)',
+                    filename: objFile.name,
+                    size: objFile.size
+                }, objFile.name, 'obj');
+                
+                this.updateStatus(`XODR文件已成功转换为3D模型并显示`);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '转换失败');
+            }
+            
+        } catch (error) {
+            console.error('转换并加载XODR失败:', error);
+            this.showError('转换失败: ' + error.message);
+            this.updateStatus('转换失败');
+        }
+    }
+    
+    async convertXodrToObj() {
+        if (!this.currentFile || this.currentFileType !== 'xodr') {
+            this.showError('请先上传XODR文件');
+            return;
+        }
+        
+        this.showLoading(true);
+        this.updateStatus('正在转换XODR到OBJ格式...');
+        
+        try {
+            // 重新上传文件进行转换
+            const fileInput = document.getElementById('fileInput');
+            const files = fileInput.files;
+            
+            if (!files || files.length === 0) {
+                this.showError('无法获取原始XODR文件，请重新上传');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', files[0]);
+            
+            const response = await fetch('/api/convert_xodr_to_obj', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                // 下载转换后的OBJ文件
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = this.currentFile.replace('.xodr', '.obj');
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                this.updateStatus('XODR文件已成功转换为OBJ格式并下载');
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || '转换失败');
+            }
+            
+        } catch (error) {
+            console.error('转换XODR到OBJ失败:', error);
+            this.showError('转换失败: ' + error.message);
+            this.updateStatus('转换失败');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+    
+    loadObjFile(file) {
+        this.showLoading(true);
+        this.updateStatus('加载OBJ文件中...');
+        
+        try {
+            // 使用3D查看器加载OBJ文件
+            this.viewer.loadOBJ(file);
+            
+            this.currentFile = file.name;
+            this.updateStatus(`成功加载OBJ文件: ${file.name}`);
+            
+            // 更新文件信息
+            this.updateFileInfo({
+                type: 'OBJ',
+                filename: file.name,
+                size: file.size
+            }, file.name, 'obj');
+            
+        } catch (error) {
+            console.error('加载OBJ文件失败:', error);
+            this.showError('加载OBJ文件失败: ' + error.message);
+            this.updateStatus('加载失败');
         } finally {
             this.showLoading(false);
             // 清空文件输入
@@ -341,10 +602,10 @@ class App {
             <p><strong>道路数量:</strong> ${metadata.feature_count || 0}</p>
             <p><strong>坐标范围:</strong></p>
             <ul>
-                <li>X: ${metadata.bounds ? metadata.bounds.min_x.toFixed(2) : 'N/A'} ~ ${metadata.bounds ? metadata.bounds.max_x.toFixed(2) : 'N/A'}</li>
-                <li>Y: ${metadata.bounds ? metadata.bounds.min_y.toFixed(2) : 'N/A'} ~ ${metadata.bounds ? metadata.bounds.max_y.toFixed(2) : 'N/A'}</li>
+                <li>X: ${metadata.bounds && metadata.bounds.min_x !== undefined ? metadata.bounds.min_x.toFixed(2) : 'N/A'} ~ ${metadata.bounds && metadata.bounds.max_x !== undefined ? metadata.bounds.max_x.toFixed(2) : 'N/A'}</li>
+                <li>Y: ${metadata.bounds && metadata.bounds.min_y !== undefined ? metadata.bounds.min_y.toFixed(2) : 'N/A'} ~ ${metadata.bounds && metadata.bounds.max_y !== undefined ? metadata.bounds.max_y.toFixed(2) : 'N/A'}</li>
             </ul>
-            <p><strong>中心点:</strong> (${metadata.center ? metadata.center[0].toFixed(2) : 'N/A'}, ${metadata.center ? metadata.center[1].toFixed(2) : 'N/A'})</p>
+            <p><strong>中心点:</strong> (${metadata.center && metadata.center[0] !== undefined ? metadata.center[0].toFixed(2) : 'N/A'}, ${metadata.center && metadata.center[1] !== undefined ? metadata.center[1].toFixed(2) : 'N/A'})</p>
         `;
     }
     
@@ -360,6 +621,17 @@ class App {
         setTimeout(() => {
             error.style.display = 'none';
         }, 5000);
+    }
+    
+    showWarning(message) {
+        // 使用console.warn显示警告，也可以考虑添加UI警告显示
+        console.warn(message);
+        // 可以在状态栏显示警告信息
+        this.updateStatus(message);
+        // 3秒后清除警告状态
+        setTimeout(() => {
+            this.updateStatus('就绪');
+        }, 3000);
     }
     
     updateStatus(message) {

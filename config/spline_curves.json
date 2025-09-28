@@ -1,0 +1,29 @@
+{
+  "description": "样条曲线拟合配置 - 最平滑的曲线拟合",
+  "geometry_tolerance": 0.3,
+  "min_road_length": 1.0,
+  "default_lane_width": 3.5,
+  "default_num_lanes": 1,
+  "default_speed_limit": 50,
+  "use_arc_fitting": false,
+  "curve_fitting_mode": "spline",
+  "polynomial_degree": 3,
+  "curve_smoothness": 0.2,
+  "use_smooth_curves": true,
+  "preserve_detail": false,
+  "coordinate_precision": 4,
+  "attribute_mapping": {
+    "WIDTH": "lane_width",
+    "LANES": "num_lanes",
+    "SPEED": "speed_limit",
+    "TYPE": "road_type",
+    "NAME": "road_name",
+    "SURFACE": "surface_type"
+  },
+  "notes": [
+    "使用样条曲线拟合，提供最平滑的曲线效果",
+    "curve_smoothness=0.2 提供高度平滑效果",
+    "preserve_detail=false 优先平滑度而非细节保持",
+    "适用于需要极度平滑曲线的高速公路场景"
+  ]
+}

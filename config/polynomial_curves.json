@@ -1,17 +1,17 @@
 {
-  "description": "高精度转换配置 - 适用于需要精确几何的场景",
-  "geometry_tolerance": 0.1,
-  "min_road_length": 0.5,
+  "description": "多项式曲线拟合配置 - 高精度且平滑的曲线拟合",
+  "geometry_tolerance": 0.5,
+  "min_road_length": 1.0,
   "default_lane_width": 3.5,
   "default_num_lanes": 1,
   "default_speed_limit": 50,
   "use_arc_fitting": false,
   "curve_fitting_mode": "polynomial",
   "polynomial_degree": 3,
-  "curve_smoothness": 0.3,
+  "curve_smoothness": 0.4,
   "use_smooth_curves": true,
   "preserve_detail": true,
-  "coordinate_precision": 5,
+  "coordinate_precision": 4,
   "attribute_mapping": {
     "WIDTH": "lane_width",
     "LANES": "num_lanes",
@@ -21,9 +21,8 @@
     "SURFACE": "surface_type"
   },
   "notes": [
-    "使用0.1米的几何容差，适合高精度应用",
-    "启用圆弧拟合，更好地处理曲线道路",
-    "5位小数精度，适合厘米级精度要求",
-    "最小道路长度5米，保留更多短道路"
+    "使用三次多项式拟合，平衡精度和平滑度",
+    "curve_smoothness=0.4 提供适中的平滑效果",
+    "适用于需要平滑曲线但保持高精度的场景"
   ]
 }

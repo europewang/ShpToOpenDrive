@@ -37,16 +37,19 @@ class ShapefileReader:
     专门处理Lane.shp格式，支持RoadID和Index属性的车道面构建。
     """
     
-    def __init__(self, shapefile_path: str):
+    def __init__(self, shapefile_path: str, coordinate_precision: int = 3):
         """初始化读取器
         
         Args:
             shapefile_path: shapefile文件路径
+            coordinate_precision: 坐标精度（小数位数）
         """
         self.shapefile_path = shapefile_path
+        self.coordinate_precision = max(1, min(10, coordinate_precision))  # 限制在1-10之间
         self.gdf = None
         self.roads_data = []
         self.lane_data = {}  # 存储按RoadID分组的车道数据
+        self.coordinate_offset = {'x': 0.0, 'y': 0.0}  # 存储坐标偏移量
         
     def load_shapefile(self) -> bool:
         """加载shapefile文件
@@ -63,6 +66,14 @@ class ShapefileReader:
         except Exception as e:
             logger.error(f"加载shapefile失败: {e}")
             return False
+    
+    def get_coordinate_offset(self) -> Dict:
+        """获取坐标偏移量
+        
+        Returns:
+            Dict: 包含x和y偏移量的字典
+        """
+        return self.coordinate_offset.copy()
     
     def get_road_info(self) -> Dict:
         """获取道路基本信息
@@ -372,6 +383,8 @@ class ShapefileReader:
         widths = []
         for left_pt, right_pt in zip(left_coords, right_coords):
             width = math.sqrt((left_pt[0] - right_pt[0])**2 + (left_pt[1] - right_pt[1])**2)
+            # 应用坐标精度控制
+            width = round(width, self.coordinate_precision)
             widths.append(width)
         
         return widths
@@ -456,6 +469,9 @@ class ShapefileReader:
             # 获取数据边界
             bounds = self.gdf.total_bounds
             min_x, min_y = bounds[0], bounds[1]
+            
+            # 存储坐标偏移量
+            self.coordinate_offset = {'x': min_x, 'y': min_y}
             
             logger.info(f"原点设置为: ({min_x:.2f}, {min_y:.2f})")
             
@@ -544,3 +560,33 @@ class ShapefileReader:
         
         logger.info(f"成功读取 {len(roads)} 个道路特征")
         return roads
+    
+    def get_bounds(self) -> Dict[str, float]:
+        """获取数据边界
+        
+        Returns:
+            Dict[str, float]: 包含minX, minY, maxX, maxY的边界信息
+        """
+        if self.gdf is None:
+            if not self.load_shapefile():
+                return {'minX': 0, 'minY': 0, 'maxX': 0, 'maxY': 0}
+        
+        bounds = self.gdf.total_bounds
+        return {
+            'minX': float(bounds[0]),
+            'minY': float(bounds[1]),
+            'maxX': float(bounds[2]),
+            'maxY': float(bounds[3])
+        }
+    
+    def get_center(self) -> Dict[str, float]:
+        """获取数据中心点
+        
+        Returns:
+            Dict[str, float]: 包含x, y的中心点坐标
+        """
+        bounds = self.get_bounds()
+        return {
+            'x': (bounds['minX'] + bounds['maxX']) / 2,
+            'y': (bounds['minY'] + bounds['maxY']) / 2
+        }

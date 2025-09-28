@@ -794,3 +794,67 @@ body {
         font-size: 0.65rem;
     }
 }
+
+/* 坐标显示面板样式 */
+.coordinate-display {
+    display: none;
+}
+
+.coordinate-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin-bottom: 8px;
+    text-align: center;
+    letter-spacing: -0.022em;
+}
+
+.coordinate-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 0.75rem;
+}
+
+.coordinate-item:last-child {
+    margin-bottom: 0;
+}
+
+.coordinate-label {
+    color: #6e6e73;
+    font-weight: 500;
+    min-width: 20px;
+}
+
+.coordinate-value {
+    color: #1d1d1f;
+    font-weight: 600;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    text-align: right;
+    min-width: 60px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .coordinate-display {
+        bottom: 15px;
+        right: 15px;
+        padding: 10px 12px;
+        min-width: 120px;
+    }
+    
+    .coordinate-title {
+        font-size: 0.75rem;
+        margin-bottom: 6px;
+    }
+    
+    .coordinate-item {
+        font-size: 0.7rem;
+        margin-bottom: 3px;
+    }
+    
+    .coordinate-value {
+        min-width: 50px;
+    }
+}

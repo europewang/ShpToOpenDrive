@@ -25,6 +25,11 @@ ShpToOpenDrive 是一个强大的工具，用于将 Shapefile 格式的道路数
 - output/: 转换后的OpenDrive文件输出目录
 - config/: 配置文件目录
 - src/: 源代码目录
+- web/: Web界面相关文件
+  - web_server.py: Web服务器主程序
+  - templates/: HTML模板
+  - js/: JavaScript文件
+  - css/: 样式文件
 - tests/: 测试文件目录
 
 ## 使用步骤
@@ -48,6 +53,27 @@ python -c "from src.main import ShpToOpenDriveConverter; import json; config = j
 ```bash
 # 转换Lane.shp格式文件
 python -c "from src.main import ShpToOpenDriveConverter; converter = ShpToOpenDriveConverter(); result = converter.convert('data/Lane.shp', 'output/Lane.xodr'); print('转换成功!' if result else '转换失败!')"
+```
+
+## Web界面使用
+
+### 启动Web服务器
+```bash
+# 进入web目录
+cd web
+
+# 启动Web服务器
+python web_server.py
+```
+
+访问地址：http://localhost:5000
+
+### Web界面功能
+- 可视化文件上传和转换
+- 3D道路预览
+- 实时坐标显示
+- 文件导出功能
+- 支持多种文件格式（SHP、XODR）
 
 # 使用自定义配置转换Lane.shp
 python -c "from src.main import ShpToOpenDriveConverter; config = {'tolerance': 0.5, 'use_smooth_curves': True, 'preserve_detail': True}; converter = ShpToOpenDriveConverter(config); result = converter.convert('data/Lane.shp', 'output/Lane.xodr'); print('转换成功!' if result else '转换失败!')"
@@ -148,7 +174,15 @@ Lane.shp格式自动识别以下属性：
 - 🎯 优化 XML 生成流程，符合 OpenDrive 1.7 标准
 - 📋 完善API文档和使用说明
 
-#### v1.1.0
+#### v1.1.0 (2024-01-XX)
+- **重大改进**：优化车道宽度计算算法
+  - 基于参考线几何段进行精确的s坐标计算
+  - 计算垂直于参考线方向的车道宽度，提高精度
+  - 支持复杂几何形状（直线、螺旋线、圆弧）
+  - 新增多个辅助方法提升算法稳定性
+- 完善API文档，添加新增方法的详细说明
+- 添加调试配置支持TestLane.shp文件
+- 优化错误处理和回退机制
 - 支持Lane.shp格式转换
 - 新增变宽车道面处理
 - 优化几何算法

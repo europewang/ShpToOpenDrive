@@ -1,8 +1,25 @@
 {
     "version": "0.2.0",
     "configurations": [
-        
-
+        {
+            "name": "Debug TestLane.shp Conversion",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "args": [
+                "${workspaceFolder}/data/test_lane/TestLane.shp",
+                "${workspaceFolder}/output/testlane_debug_output.xodr",
+                "--config", "${workspaceFolder}/config/lane_format.json"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "justMyCode": true,
+            "python": "C:\\Users\\WXL\\.conda\\envs\\shp2opendrive\\python.exe"
+        },
         {
             "name": "Debug Lane.shp Conversion",
             "type": "python",

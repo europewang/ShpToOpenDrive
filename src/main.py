@@ -25,8 +25,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(log_file, encoding='utf-8'),
-        # 如果需要同时在控制台显示，可以取消下面这行的注释
-        # logging.StreamHandler()
+        # 启用控制台输出以便调试车道宽度问题
+        logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class ShpToOpenDriveConverter:
         # 默认配置
         self.config = {
             'geometry_tolerance': 1.0,      # 几何拟合容差（米）
-            'min_road_length': 10.0,        # 最小道路长度（米）
+            'min_road_length': 1.0,        # 最小道路长度（米）
             'default_lane_width': 3.5,      # 默认车道宽度（米）
             'default_num_lanes': 1,         # 默认车道数
             'default_speed_limit': 50,      # 默认限速（km/h）
@@ -55,6 +55,9 @@ class ShpToOpenDriveConverter:
             'coordinate_precision': 3,      # 坐标精度（小数位数）
             'use_smooth_curves': True,      # 是否使用平滑曲线拟合
             'preserve_detail': True,        # 是否保留更多细节
+            'curve_fitting_mode': 'parampoly3',  # 曲线拟合模式
+            'polynomial_degree': 3,         # 多项式拟合阶数
+            'curve_smoothness': 0.5,        # 曲线平滑度
             # Lane格式专用配置
             'lane_format_settings': {
                 'enabled': True,
@@ -90,7 +93,11 @@ class ShpToOpenDriveConverter:
         self.geometry_converter = GeometryConverter(
             tolerance=geometry_tolerance,
             smooth_curves=self.config.get('use_smooth_curves', True),
-            preserve_detail=self.config.get('preserve_detail', True)
+            preserve_detail=self.config.get('preserve_detail', True),
+            curve_fitting_mode=self.config.get('curve_fitting_mode', 'parampoly3'),
+            polynomial_degree=self.config.get('polynomial_degree', 3),
+            curve_smoothness=self.config.get('curve_smoothness', 0.5),
+            coordinate_precision=self.config.get('coordinate_precision', 3)
         )
         self.opendrive_generator = None
         
@@ -166,7 +173,7 @@ class ShpToOpenDriveConverter:
             bool: 加载是否成功
         """
         try:
-            self.shp_reader = ShapefileReader(shapefile_path)
+            self.shp_reader = ShapefileReader(shapefile_path, self.config.get('coordinate_precision', 3))
             
             if not self.shp_reader.load_shapefile():
                 return False
@@ -568,7 +575,12 @@ class ShpToOpenDriveConverter:
         try:
             # 创建OpenDrive生成器
             road_network_name = Path(output_path).stem
-            self.opendrive_generator = OpenDriveGenerator(road_network_name)
+            self.opendrive_generator = OpenDriveGenerator(
+                name=road_network_name,
+                curve_fitting_mode=self.config.get('curve_fitting_mode', 'polyline'),
+                polynomial_degree=self.config.get('polynomial_degree', 3),
+                curve_smoothness=self.config.get('curve_smoothness', 0.5)
+            )
             
             # 创建道路
             road_ids = []
@@ -675,7 +687,7 @@ def main():
     parser.add_argument('output', help='输出OpenDrive文件路径')
     parser.add_argument('--config', help='配置文件路径（JSON格式）')
     parser.add_argument('--tolerance', type=float, default=1.0, help='几何拟合容差（米）')
-    parser.add_argument('--min-length', type=float, default=10.0, help='最小道路长度（米）')
+    parser.add_argument('--min-length', type=float, default=1.0, help='最小道路长度（米）')
     parser.add_argument('--use-arcs', action='store_true', help='使用圆弧拟合')
     parser.add_argument('--report', help='转换报告输出路径')
     
