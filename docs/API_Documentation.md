@@ -19,10 +19,13 @@ ShpToOpenDrive 是一个将 Shapefile 格式的道路数据转换为 OpenDrive �
 
 ```
 src/
-├── main.py                 # 主程序和转换器
-├── shp_reader.py           # Shapefile 读取模块
-├── geometry_converter.py   # 几何转换模块
-└── opendrive_generator.py  # OpenDrive 生成模块
+├── main.py                    # 主程序和转换器
+├── shp_reader.py              # Shapefile 读取模块
+├── geometry_converter.py      # 几何转换模块
+├── opendrive_generator.py     # OpenDrive 生成模块
+├── xodr_parser.py             # OpenDRIVE 文件解析器（新增）
+├── xodr_to_obj_converter.py   # 3D模型转换器（新增）
+└── visualizer.py              # 可视化工具
 ```
 
 ## 方法调用关系与功能概述
@@ -72,6 +75,26 @@ main.py (ShapefileToOpenDriveConverter)
 - `generate_file()` - 生成最终XML文件
 - `_create_planview_from_segments()` - 创建平面视图（内部方法）
 - `_calculate_road_reference_line()` - 计算道路参考线（内部方法）
+
+#### 4. XodrParser (文件解析层) - 新增模块
+**主要职责：** 解析和验证OpenDRIVE文件
+- `parse_file()` - 解析XODR文件主入口
+- `generate_road_points()` - 生成道路中心线点
+- `get_road_center_lines()` - 获取所有道路中心线
+- `get_statistics()` - 获取文件统计信息
+- `_parse_header()` - 解析文件头信息（内部方法）
+- `_parse_roads()` - 解析道路信息（内部方法）
+- `_parse_plan_view()` - 解析平面视图（内部方法）
+
+#### 5. XodrToObjConverter (3D转换层) - 新增模块
+**主要职责：** 将OpenDRIVE文件转换为3D模型
+- `convert()` - 主转换接口
+- `convert_xodr_to_obj()` - XODR到OBJ转换
+- `_generate_road_mesh()` - 生成道路网格
+- `_generate_road_centerline()` - 生成道路中心线
+- `_generate_geometry_points()` - 生成几何点
+- `_export_obj_file()` - 导出OBJ文件
+- `get_conversion_stats()` - 获取转换统计
 
 ### 方法间依赖关系
 
@@ -1576,6 +1599,170 @@ v1.2.0版本特别适用于：
 - **数据格式**: 支持Road.shp和Lane.shp两种数据格式
 - **OpenDRIVE标准**: 符合OpenDRIVE 1.4+标准
 - **Python版本**: 支持Python 3.7+
+
+---
+
+## 新增模块详细说明 (v1.3.0)
+
+### xodr_parser.py - OpenDRIVE文件解析器
+
+#### 模块概述
+`XODRParser` 类提供了完整的OpenDRIVE文件解析功能，支持提取道路几何、车道信息和交叉口数据。
+
+#### XODRParser 类
+
+##### 构造函数
+```python
+__init__(self)
+```
+**功能:** 初始化解析器，准备解析OpenDRIVE文件
+
+##### 主要方法
+
+###### parse_file()
+```python
+parse_file(self, file_path: str) -> Dict
+```
+**参数:**
+- `file_path` (str): XODR文件路径
+
+**返回值:** Dict - 包含header、roads、junctions的完整数据
+
+**功能:** 解析OpenDRIVE文件主入口，提取所有结构化数据
+
+###### generate_road_points()
+```python
+generate_road_points(self, road_data: Dict, resolution: float = 1.0) -> List[Tuple[float, float, float]]
+```
+**参数:**
+- `road_data` (Dict): 道路数据字典
+- `resolution` (float): 采样分辨率，默认1.0米
+
+**返回值:** List[Tuple] - (x, y, z)坐标点列表
+
+**功能:** 根据道路几何信息生成中心线坐标点
+
+###### get_road_center_lines()
+```python
+get_road_center_lines(self, resolution: float = 1.0) -> Dict[str, Dict]
+```
+**参数:**
+- `resolution` (float): 采样分辨率
+
+**返回值:** Dict - 所有道路的中心线数据
+
+**功能:** 获取所有道路的中心线坐标和属性信息
+
+###### get_statistics()
+```python
+get_statistics(self) -> Dict
+```
+**返回值:** Dict - 文件统计信息
+
+**功能:** 获取解析文件的统计信息，包括道路数量、总长度等
+
+##### 内部方法
+
+- `_parse_header()` - 解析文件头信息
+- `_parse_roads()` - 解析道路信息
+- `_parse_plan_view()` - 解析平面视图几何
+- `_parse_elevation_profile()` - 解析高程信息
+- `_parse_lanes()` - 解析车道信息
+- `_parse_junctions()` - 解析交叉口信息
+- `_generate_geometry_points()` - 生成几何点坐标
+
+### xodr_to_obj_converter.py - 3D模型转换器
+
+#### 模块概述
+`XODRToOBJConverter` 类将OpenDRIVE文件转换为OBJ格式的3D模型，支持道路表面网格生成和可视化。
+
+#### XODRToOBJConverter 类
+
+##### 构造函数
+```python
+__init__(self, resolution: float = 1.0, lane_width: float = 3.5)
+```
+**参数:**
+- `resolution` (float): 网格分辨率，默认1.0米
+- `lane_width` (float): 默认车道宽度，默认3.5米
+
+**功能:** 初始化3D转换器，设置网格生成参数
+
+##### 主要方法
+
+###### convert()
+```python
+convert(self, xodr_file: str, obj_file: str) -> bool
+```
+**参数:**
+- `xodr_file` (str): 输入的XODR文件路径
+- `obj_file` (str): 输出的OBJ文件路径
+
+**返回值:** bool - 转换是否成功
+
+**功能:** 主转换接口，完成从XODR到OBJ的完整转换流程
+
+###### convert_xodr_to_obj()
+```python
+convert_xodr_to_obj(self, xodr_data: Dict, obj_file: str) -> bool
+```
+**参数:**
+- `xodr_data` (Dict): 解析后的XODR数据
+- `obj_file` (str): 输出OBJ文件路径
+
+**返回值:** bool - 转换是否成功
+
+**功能:** 从解析数据生成3D网格并导出OBJ文件
+
+###### get_conversion_stats()
+```python
+get_conversion_stats(self) -> Dict
+```
+**返回值:** Dict - 转换统计信息
+
+**功能:** 获取转换过程的统计信息，包括顶点数、面数等
+
+##### 内部方法
+
+- `_generate_road_mesh()` - 生成单条道路的3D网格
+- `_generate_road_centerline()` - 生成道路中心线
+- `_generate_geometry_points()` - 生成几何点坐标
+- `_create_road_surface()` - 创建道路表面网格
+- `_export_obj_file()` - 导出OBJ格式文件
+- `_write_vertices()` - 写入顶点数据
+- `_write_faces()` - 写入面数据
+
+#### 3D网格生成算法
+
+##### 道路表面网格
+1. **中心线采样**: 根据分辨率对道路中心线进行采样
+2. **横截面生成**: 在每个采样点生成垂直于中心线的横截面
+3. **顶点计算**: 计算道路边界的顶点坐标
+4. **三角面片**: 生成三角形面片构建道路表面
+
+##### 车道级渲染
+1. **车道边界**: 精确计算每条车道的边界线
+2. **宽度变化**: 支持变宽车道的网格生成
+3. **纹理坐标**: 为材质贴图生成UV坐标
+4. **法向量**: 计算表面法向量用于光照
+
+### Web服务器模块 (web_server.py)
+
+#### 模块概述
+提供基于Flask的Web服务，支持文件上传、在线转换和3D可视化。
+
+#### 主要功能
+- **文件上传**: 支持Shapefile上传和处理
+- **在线转换**: 实时转换并显示结果
+- **3D可视化**: 基于Three.js的3D道路模型展示
+- **苹果风格UI**: 现代化的用户界面设计
+- **实时反馈**: 转换进度和状态实时更新
+
+#### API接口
+- `POST /upload` - 文件上传接口
+- `GET /convert` - 转换状态查询
+- `GET /download` - 结果文件下载
+- `GET /preview` - 3D模型预览
 
 ---
 

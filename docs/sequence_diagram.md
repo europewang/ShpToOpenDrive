@@ -330,10 +330,138 @@ sequenceDiagram
 - **新增**: 基于边界线index的planview参考线计算
 - **新增**: 支持index='0'边界线作为道路参考线
 
+## Web前端交互流程 (v1.3.0新增)
+
+```mermaid
+sequenceDiagram
+    participant User as 用户浏览器
+    participant WebServer as Flask Web服务器
+    participant Converter as ShpToOpenDriveConverter
+    participant Parser as XODRParser
+    participant ObjConverter as XODRToOBJConverter
+    participant FileSystem as 文件系统
+
+    Note over User,FileSystem: Web界面转换流程
+    
+    User->>WebServer: 访问Web界面
+    WebServer-->>User: 返回苹果风格UI页面
+    
+    User->>WebServer: 上传Shapefile文件
+    WebServer->>FileSystem: 保存上传文件到临时目录
+    FileSystem-->>WebServer: 文件保存成功
+    
+    WebServer->>Converter: 调用转换接口
+    Converter->>Converter: 执行Shapefile到XODR转换
+    Converter-->>WebServer: 返回转换结果和统计信息
+    
+    WebServer->>Parser: 解析生成的XODR文件
+    Parser->>Parser: 提取道路几何和车道信息
+    Parser-->>WebServer: 返回解析数据
+    
+    WebServer->>ObjConverter: 生成3D模型
+    ObjConverter->>ObjConverter: 转换XODR到OBJ格式
+    ObjConverter-->>WebServer: 返回3D模型数据
+    
+    WebServer-->>User: 返回转换结果页面
+    Note over User: 显示转换统计、3D预览、下载链接
+    
+    User->>WebServer: 请求3D模型预览
+    WebServer-->>User: 返回Three.js 3D渲染页面
+    
+    User->>WebServer: 下载转换结果
+    WebServer->>FileSystem: 读取输出文件
+    FileSystem-->>WebServer: 返回文件内容
+    WebServer-->>User: 提供文件下载
+```
+
+## XODR解析和3D转换流程 (v1.3.0新增)
+
+```mermaid
+sequenceDiagram
+    participant Parser as XODRParser
+    participant ObjConverter as XODRToOBJConverter
+    participant ThreeJS as Three.js渲染器
+    participant File as 文件系统
+
+    Note over Parser,File: OpenDRIVE文件解析和3D模型生成
+    
+    Parser->>Parser: parse_file(xodr_path)
+    Parser->>Parser: _parse_header() - 解析文件头
+    Parser->>Parser: _parse_roads() - 解析道路信息
+    
+    loop 每条道路
+        Parser->>Parser: _parse_plan_view() - 解析平面几何
+        Parser->>Parser: _parse_elevation_profile() - 解析高程
+        Parser->>Parser: _parse_lanes() - 解析车道信息
+    end
+    
+    Parser->>Parser: _parse_junctions() - 解析交叉口
+    Parser-->>ObjConverter: 返回结构化数据
+    
+    ObjConverter->>ObjConverter: convert_xodr_to_obj()
+    
+    loop 每条道路
+        ObjConverter->>ObjConverter: _generate_road_mesh()
+        ObjConverter->>ObjConverter: _generate_road_centerline()
+        
+        loop 沿道路采样点
+            ObjConverter->>ObjConverter: _generate_geometry_points()
+            ObjConverter->>ObjConverter: 计算道路横截面
+            ObjConverter->>ObjConverter: 生成顶点和面片
+        end
+    end
+    
+    ObjConverter->>ObjConverter: _export_obj_file()
+    ObjConverter->>File: 写入OBJ格式文件
+    File-->>ObjConverter: 文件写入成功
+    
+    ObjConverter->>ThreeJS: 提供3D模型数据
+    ThreeJS->>ThreeJS: 加载OBJ模型
+    ThreeJS->>ThreeJS: 应用材质和光照
+    ThreeJS-->>ObjConverter: 3D渲染完成
+```
+
+## 配置文件处理流程 (v1.3.0新增)
+
+```mermaid
+sequenceDiagram
+    participant Main as main.py
+    participant Config as 配置系统
+    participant DefaultConfig as 默认配置
+    participant UserConfig as 用户配置文件
+    participant Converter as 转换器组件
+
+    Note over Main,Converter: 配置加载和应用流程
+    
+    Main->>Config: 初始化配置系统
+    Config->>DefaultConfig: 加载默认配置参数
+    DefaultConfig-->>Config: 返回默认值
+    
+    alt 用户提供配置文件
+        Config->>UserConfig: 读取用户配置文件
+        UserConfig-->>Config: 返回用户自定义参数
+        Config->>Config: 合并配置(用户配置覆盖默认配置)
+    end
+    
+    Config-->>Main: 返回最终配置参数
+    
+    Main->>Converter: 应用配置到转换器
+    
+    loop 各个转换组件
+        Converter->>Converter: 应用几何转换参数
+        Converter->>Converter: 应用车道配置参数
+        Converter->>Converter: 应用输出格式参数
+    end
+    
+    Converter-->>Main: 配置应用完成
+```
+
 ## 支持的数据格式
 
 1. **传统道路格式**: 包含道路中心线的标准shapefile
 2. **Lane.shp格式**: 包含车道边界线的详细车道数据，支持变宽车道面
+3. **OpenDRIVE格式**: 标准XODR文件，支持解析和3D转换
+4. **OBJ 3D模型**: 用于可视化的三维网格模型
 
 ## 输出特性
 
@@ -342,3 +470,6 @@ sequenceDiagram
 - 支持变宽车道建模
 - 包含完整的车道信息和道路标记
 - 自动验证和统计报告
+- **新增**: 3D模型导出和Web可视化
+- **新增**: 实时转换进度和状态反馈
+- **新增**: 苹果风格的现代化用户界面
