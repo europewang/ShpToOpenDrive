@@ -119,6 +119,7 @@ output/
 data/
 *.lock
 .trae/
+reference/
 
 # Shapefile locks
 *.shp.*.sr.lock
