@@ -127,6 +127,88 @@ body {
     border-right: 0.5px solid rgba(0, 0, 0, 0.1);
 }
 
+/* 文件列表样式 */
+.file-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.file-list .no-files {
+    color: #86868b;
+    font-style: italic;
+    text-align: center;
+    padding: 1rem 0;
+    margin: 0;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.file-item:hover {
+    background: rgba(255, 255, 255, 0.95);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-item.selected {
+    background: rgba(142, 142, 147, 0.2);
+    border-color: #8e8e93;
+}
+
+.file-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-item-name {
+    font-weight: 500;
+    color: #1d1d1f;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-item-type {
+    font-size: 0.8rem;
+    color: #86868b;
+    text-transform: uppercase;
+}
+
+.file-item-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-left: 0.5rem;
+}
+
+.btn-delete {
+    background: rgba(255, 59, 48, 0.1);
+    color: #ff3b30;
+    border: 1px solid rgba(255, 59, 48, 0.3);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-delete:hover {
+    background: rgba(255, 59, 48, 0.2);
+    border-color: rgba(255, 59, 48, 0.5);
+    transform: none;
+    box-shadow: none;
+}
+
 /* 文件信息面板样式 */
 #fileInfo {
     word-wrap: break-word;
@@ -260,23 +342,49 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     text-align: center;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     color: white;
-    z-index: 100;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    min-width: 200px;
 }
 
 .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top: 4px solid white;
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-top: 4px solid #007AFF;
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: 0 auto 1rem;
 }
 
+.loading p {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.loading .loading-text {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    animation: pulse 2s ease-in-out infinite;
+}
+
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
 }
 
 /* 错误提示 */
@@ -520,32 +628,7 @@ body {
     font-weight: bold;
 }
 
-/* 示例文件列表 */
-#sampleFiles {
-    max-height: 200px;
-    overflow-y: auto;
-}
 
-.sample-file {
-    padding: 0.75rem;
-    margin: 0.25rem 0;
-    background: rgba(174, 174, 178, 0.05);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 0.9rem;
-    word-wrap: break-word;
-    word-break: break-all;
-    white-space: normal;
-    line-height: 1.4;
-    border: 0.5px solid rgba(174, 174, 178, 0.1);
-}
-
-.sample-file:hover {
-    background: rgba(174, 174, 178, 0.1);
-    transform: translateX(2px);
-    border-color: rgba(174, 174, 178, 0.3);
-}
 
 /* 响应式设计 */
 @media (max-width: 768px) {
@@ -856,5 +939,144 @@ body {
     
     .coordinate-value {
         min-width: 50px;
+    }
+    
+    /* 模态框响应式设计 */
+    .modal-content {
+        margin: 5% auto;
+        width: 95%;
+        max-width: none;
+        border-radius: 16px;
+    }
+    
+    .modal-content h2 {
+        padding: 1rem;
+        font-size: 1.1rem;
+        border-radius: 16px 16px 0 0;
+    }
+    
+    .modal-content #modalBody {
+        padding: 1rem;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+    
+    .modal-footer {
+        padding: 0.75rem 1rem;
+        flex-direction: column;
+        gap: 0.5rem;
+        border-radius: 0 0 16px 16px;
+    }
+    
+    .modal .btn {
+        padding: 0.75rem 1rem;
+        width: 100%;
+        font-size: 0.9rem;
+    }
+    
+    .modal .form-group {
+        margin-bottom: 0.75rem;
+    }
+    
+    .modal .form-group label {
+        font-size: 0.85rem;
+        margin-bottom: 0.4rem;
+    }
+    
+    .modal .form-control {
+        padding: 0.6rem;
+        font-size: 0.85rem;
+    }
+    
+    .modal .option-group {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        border-radius: 10px;
+    }
+    
+    .modal .option-group h4 {
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.4rem;
+    }
+    
+    .modal .export-options {
+        max-height: 300px;
+    }
+    
+    .close {
+        right: 1rem;
+        top: 1rem;
+        font-size: 1.3rem;
+        width: 20px;
+        height: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* 超小屏幕模态框优化 */
+    .modal-content {
+        margin: 2% auto;
+        width: 98%;
+        border-radius: 12px;
+    }
+    
+    .modal-content h2 {
+        padding: 0.75rem;
+        font-size: 1rem;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .modal-content #modalBody {
+        padding: 0.75rem;
+        max-height: 70vh;
+    }
+    
+    .modal-footer {
+        padding: 0.5rem 0.75rem;
+        border-radius: 0 0 12px 12px;
+    }
+    
+    .modal .btn {
+        padding: 0.6rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    
+    .modal .form-group {
+        margin-bottom: 0.6rem;
+    }
+    
+    .modal .form-group label {
+        font-size: 0.8rem;
+        margin-bottom: 0.3rem;
+    }
+    
+    .modal .form-control {
+        padding: 0.5rem;
+        font-size: 0.8rem;
+    }
+    
+    .modal .option-group {
+        margin-bottom: 0.75rem;
+        padding: 0.6rem;
+        border-radius: 8px;
+    }
+    
+    .modal .option-group h4 {
+        font-size: 0.85rem;
+        margin-bottom: 0.6rem;
+        padding-bottom: 0.3rem;
+    }
+    
+    .modal .export-options {
+        max-height: 250px;
+    }
+    
+    .close {
+        right: 0.75rem;
+        top: 0.75rem;
+        font-size: 1.2rem;
+        width: 18px;
+        height: 18px;
     }
 }

@@ -47,6 +47,10 @@ class Web3DViewer {
             e: false
         };
         
+        // 默认视角参数
+        this.defaultCameraPosition = null;
+        this.defaultCameraTarget = null;
+        
         // 鼠标控制状态
         this.mouse = {
             rightButton: false,
@@ -95,25 +99,39 @@ class Web3DViewer {
         this.scene.fog = new THREE.Fog(0xf2f2f7, 1000, 10000);
     }
     
+    /**
+     * 创建透视相机
+     * 配置相机参数以优化3D场景的显示效果
+     */
     createCamera() {
         const aspect = this.container.clientWidth / this.container.clientHeight;
-        this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 10000);
+        // 调整近远平面比例，提高深度精度，减少抖动
+        this.camera = new THREE.PerspectiveCamera(75, aspect, 1, 5000);
         this.camera.position.set(0, 500, 1000);
         this.camera.lookAt(0, 0, 0);
     }
     
+    /**
+     * 创建WebGL渲染器
+     * 配置高质量渲染参数和抗锯齿效果
+     */
     createRenderer() {
         this.renderer = new THREE.WebGLRenderer({ 
             antialias: true,
-            alpha: true
+            alpha: true,
+            precision: 'highp' // 使用高精度
         });
         this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        // 限制像素比例，避免在高DPI屏幕上过度渲染导致抖动
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.outputEncoding = THREE.sRGBEncoding;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.2;
+        
+        // 启用对数深度缓冲，提高远近物体渲染精度
+        this.renderer.logarithmicDepthBuffer = true;
         
         console.log('Adding renderer DOM element to container...');
         console.log('Renderer DOM element:', this.renderer.domElement);
@@ -126,14 +144,23 @@ class Web3DViewer {
         console.log('Canvas element in DOM:', document.querySelector('#viewer canvas'));
     }
     
+    /**
+     * 创建轨道控制器
+     * 配置鼠标交互控制，支持旋转、缩放和平移
+     */
     createControls() {
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.05;
+        this.controls.dampingFactor = 0.25; // 增加阻尼因子，减少抖动
         this.controls.screenSpacePanning = false;
-        this.controls.minDistance = 10;
+        this.controls.minDistance = 1; // 减小最小距离
         this.controls.maxDistance = 5000;
         this.controls.maxPolarAngle = Math.PI / 2;
+        
+        // 添加缩放平滑设置
+        this.controls.zoomSpeed = 0.5; // 降低缩放速度
+        this.controls.rotateSpeed = 0.5; // 降低旋转速度
+        this.controls.panSpeed = 0.8; // 调整平移速度
         
         // 交换鼠标按键功能：左键移动，右键旋转
         this.controls.mouseButtons = {
@@ -148,6 +175,10 @@ class Web3DViewer {
         });
     }
     
+    /**
+     * 创建场景光照
+     * 包括环境光、方向光和点光源，提供良好的3D视觉效果
+     */
     createLights() {
         // 环境光
         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -173,6 +204,10 @@ class Web3DViewer {
         this.scene.add(pointLight);
     }
     
+    /**
+     * 创建辅助显示元素
+     * 包括网格线和坐标轴，帮助用户理解3D空间
+     */
     createHelpers() {
         // 网格辅助线
         this.gridHelper = new THREE.GridHelper(2000, 50, 0xc7c7cc, 0xd1d1d6);
@@ -467,15 +502,14 @@ class Web3DViewer {
         const startTime = performance.now();
         
         try {
-            // 清除之前的道路线条
-            this.clearRoads();
-            
             if (!geojson || !geojson.features) {
                 throw new Error('无效的GeoJSON数据');
             }
             
             let totalPoints = 0;
-            this.roadGroup = new THREE.Group();
+            // 为每个SHP文件创建独立的组
+            const newRoadGroup = new THREE.Group();
+            this.roadGroup = newRoadGroup;
             
             // 检测坐标系统并设置原点（用于地理坐标系转换）
             if (geojson.features.length > 0 && geojson.features[0].geometry.coordinates.length > 0) {
@@ -533,12 +567,12 @@ class Web3DViewer {
                         name: feature.properties.name
                     };
                     
-                    this.roadGroup.add(line);
+                    newRoadGroup.add(line);
                     this.roadLines.push(line);
                 }
             });
             
-            this.scene.add(this.roadGroup);
+            this.scene.add(newRoadGroup);
             this.currentData = geojson;
             
             // 调整相机视角
@@ -553,6 +587,14 @@ class Web3DViewer {
             });
             
             console.log(`成功加载 ${geojson.features.length} 条道路，${totalPoints} 个点`);
+            
+            // 返回包含roadGroup的数据结构
+            return {
+                roadGroup: newRoadGroup,
+                roadCount: geojson.features.length,
+                pointCount: totalPoints,
+                metadata: geojson.metadata || {}
+            };
             
         } catch (error) {
             console.error('加载GeoJSON数据时出错:', error);
@@ -715,7 +757,7 @@ class Web3DViewer {
     
 
     
-    // 选择线条
+    // 选择对象（线条或模型）
     selectLine(x, y) {
         console.log('selectLine called with:', x, y);
         console.log('roadLines count:', this.roadLines.length);
@@ -727,44 +769,74 @@ class Web3DViewer {
         // 设置射线
         this.raycaster.setFromCamera(this.mouseVector, this.camera);
         
-        // 检测与道路线条的交点
-        const intersects = this.raycaster.intersectObjects(this.roadLines);
+        // 收集所有可交互的对象
+        const interactableObjects = [...this.roadLines];
+        
+        // 添加所有OBJ模型的网格
+        this.scene.traverse((child) => {
+            if (child.isMesh && child.parent && child.parent.userData && child.parent.userData.isOBJModel) {
+                interactableObjects.push(child);
+            }
+        });
+        
+        // 检测交点
+        const intersects = this.raycaster.intersectObjects(interactableObjects);
         console.log('intersects found:', intersects.length);
         
         // 清除之前的选择
-        this.clearLineSelection();
+        this.clearSelection();
         
         if (intersects.length > 0) {
             const selectedObject = intersects[0].object;
-            this.selectedLine = selectedObject;
+            this.selectedObject = selectedObject;
             
-            console.log('选中线条:', selectedObject.userData);
+            console.log('选中对象:', selectedObject.userData);
             
-            // 高亮选中的线条
-            this.highlightSelectedLine(selectedObject);
+            // 高亮选中的对象
+            this.highlightSelectedObject(selectedObject);
             
-            // 显示线条信息
-            this.showLineInfo(selectedObject);
+            // 显示对象信息
+            if (selectedObject.type === 'Line') {
+                this.showLineInfo(selectedObject);
+            } else if (selectedObject.isMesh) {
+                this.showMeshInfo(selectedObject);
+            }
         } else {
-            console.log('没有选中任何线条');
+            console.log('没有选中任何对象');
         }
     }
     
-    // 清除线条选择
-    clearLineSelection() {
-        if (this.selectedLine) {
+    // 清除选择
+    clearSelection() {
+        if (this.selectedObject) {
             // 恢复原始颜色
-            this.selectedLine.material.color.setHex(this.settings.lineColor);
-            this.selectedLine = null;
+            if (this.selectedObject.type === 'Line') {
+                this.selectedObject.material.color.setHex(this.settings.lineColor);
+            } else if (this.selectedObject.isMesh && this.selectedObject.originalMaterial) {
+                this.selectedObject.material = this.selectedObject.originalMaterial;
+            }
+            this.selectedObject = null;
         }
         
         // 隐藏信息面板
-        this.hideLineInfo();
+        this.hideObjectInfo();
     }
     
-    // 高亮选中的线条
-    highlightSelectedLine(line) {
-        line.material.color.setHex(0xff0000); // 红色高亮
+    // 高亮选中的对象
+    highlightSelectedObject(object) {
+        if (object.type === 'Line') {
+            object.material.color.setHex(0xff0000); // 红色高亮
+        } else if (object.isMesh) {
+            // 保存原始材质
+            if (!object.originalMaterial) {
+                object.originalMaterial = object.material.clone();
+            }
+            // 创建高亮材质
+            const highlightMaterial = object.material.clone();
+            highlightMaterial.color.setHex(0xff0000);
+            highlightMaterial.emissive.setHex(0x330000);
+            object.material = highlightMaterial;
+        }
     }
     
     // 显示线条信息
@@ -874,8 +946,68 @@ class Web3DViewer {
         infoPanel.style.display = 'block';
     }
     
-    // 隐藏线条信息
-    hideLineInfo() {
+    // 显示网格信息
+    showMeshInfo(mesh) {
+        const userData = mesh.userData;
+        let infoPanel = document.getElementById('lineInfoPanel');
+        
+        if (!infoPanel) {
+            infoPanel = document.createElement('div');
+            infoPanel.id = 'lineInfoPanel';
+            infoPanel.style.position = 'absolute';
+            infoPanel.style.top = '20px';
+            infoPanel.style.left = '20px';
+            infoPanel.style.background = 'rgba(128, 128, 128, 0.9)';
+            infoPanel.style.color = 'white';
+            infoPanel.style.padding = '12px';
+            infoPanel.style.borderRadius = '5px';
+            infoPanel.style.fontSize = '0.9rem';
+            infoPanel.style.zIndex = '1002';
+            infoPanel.style.maxWidth = '350px';
+            infoPanel.style.lineHeight = '1.4';
+            this.container.appendChild(infoPanel);
+        }
+        
+        // 获取网格几何信息
+        const geometry = mesh.geometry;
+        const vertexCount = geometry.attributes.position.count;
+        const faceCount = geometry.index ? geometry.index.count / 3 : vertexCount / 3;
+        
+        // 计算边界框
+        geometry.computeBoundingBox();
+        const boundingBox = geometry.boundingBox;
+        const size = boundingBox.getSize(new THREE.Vector3());
+        const center = boundingBox.getCenter(new THREE.Vector3());
+        
+        // 获取材质信息
+        const material = mesh.material;
+        const materialType = material.type;
+        
+        infoPanel.innerHTML = `
+            <h4 style="margin: 0 0 10px 0; color: white; font-size: 1.2rem; border-bottom: 1px solid #999; padding-bottom: 5px;">模型信息</h4>
+            
+            <div style="margin-bottom: 8px;"><strong>基本信息</strong></div>
+            <div style="margin-left: 10px; margin-bottom: 4px;"><strong>对象名称:</strong> ${mesh.name || 'N/A'}</div>
+            <div style="margin-left: 10px; margin-bottom: 8px;"><strong>对象类型:</strong> ${mesh.type}</div>
+            
+            <div style="margin-bottom: 8px;"><strong>几何信息</strong></div>
+            <div style="margin-left: 10px; margin-bottom: 4px;"><strong>顶点数量:</strong> ${vertexCount.toLocaleString()}</div>
+            <div style="margin-left: 10px; margin-bottom: 4px;"><strong>面数量:</strong> ${Math.floor(faceCount).toLocaleString()}</div>
+            <div style="margin-left: 10px; margin-bottom: 8px;"><strong>材质类型:</strong> ${materialType}</div>
+            
+            <div style="margin-bottom: 8px;"><strong>边界框信息</strong></div>
+            <div style="margin-left: 10px; margin-bottom: 4px;"><strong>尺寸:</strong> ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}</div>
+            <div style="margin-left: 10px; margin-bottom: 4px;"><strong>中心点:</strong> (${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})</div>
+            <div style="margin-left: 10px; margin-bottom: 8px;"><strong>体积:</strong> ${(size.x * size.y * size.z).toFixed(2)} 立方单位</div>
+            
+            <div style="margin-top: 10px; font-size: 0.8rem; color: #ccc; border-top: 1px solid #666; padding-top: 5px;">点击其他地方取消选择</div>
+        `;
+        
+        infoPanel.style.display = 'block';
+    }
+    
+    // 隐藏对象信息
+    hideObjectInfo() {
         const infoPanel = document.getElementById('lineInfoPanel');
         if (infoPanel) {
             infoPanel.style.display = 'none';
@@ -976,8 +1108,15 @@ class Web3DViewer {
     resetView() {
         if (this.roadLines.length > 0) {
             this.fitCameraToRoads();
+        } else if (this.defaultCameraPosition && this.defaultCameraTarget) {
+            // 使用保存的默认视角参数
+            this.camera.position.copy(this.defaultCameraPosition);
+            this.camera.lookAt(this.defaultCameraTarget.x, this.defaultCameraTarget.y, this.defaultCameraTarget.z);
+            this.controls.target.copy(this.defaultCameraTarget);
+            this.controls.update();
         } else {
-            this.camera.position.set(0, 500, 1000);
+            // 如果没有保存的参数，使用默认视角
+            this.camera.position.set(0, 200, 500);  // 降低默认高度
             this.camera.lookAt(0, 0, 0);
             this.controls.target.set(0, 0, 0);
             this.controls.update();
@@ -1012,43 +1151,98 @@ class Web3DViewer {
         this.renderer.render(this.scene, this.camera);
     }
     
-    loadOBJ(file) {
+    loadOBJ(file, onProgress = null) {
         const startTime = performance.now();
         
-        try {
-            // 清除之前的模型
-            this.clearRoads();
-            
-            this.meshGroup = new THREE.Group();
-            
-            // 创建文件读取器
-            const reader = new FileReader();
-            reader.onload = (event) => {
+        return new Promise((resolve, reject) => {
+            try {
+                // 为新模型创建独立的组
+                const newMeshGroup = new THREE.Group();
+                this.meshGroup = newMeshGroup;
+                
+                // 通知开始解析
+                if (onProgress) {
+                    onProgress('解析OBJ文件', '正在读取几何数据...');
+                }
+                
+                // 创建文件读取器
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                if (onProgress) {
+                    onProgress('构建3D模型', '正在生成网格和材质...');
+                }
                 const objData = event.target.result;
                 
                 // 使用OBJLoader加载模型
                 const object = this.objLoader.parse(objData);
                 
-                // 创建材质
-                const material = new THREE.MeshLambertMaterial({
-                    color: 0x666666,
+                // 首先交换Y轴和Z轴坐标以适应三维显示，并翻转Z轴
+                object.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        const positions = child.geometry.attributes.position;
+                        if (positions) {
+                            const array = positions.array;
+                            for (let i = 0; i < array.length; i += 3) {
+                                // 交换Y和Z坐标，并翻转Z轴
+                                const temp = array[i + 1]; // 保存Y
+                                array[i + 1] = array[i + 2]; // Y = Z
+                                array[i + 2] = -temp; // Z = -原Y (翻转)
+                            }
+                            positions.needsUpdate = true;
+                        }
+                    }
+                });
+                
+                // 创建浅灰色填充材质
+                const fillMaterial = new THREE.MeshLambertMaterial({
+                    color: 0xE0E0E0,
                     transparent: true,
-                    opacity: 0.8
+                    opacity: 0.995
                 });
                 
                 // 遍历加载的对象，应用材质
                 object.traverse((child) => {
                     if (child.isMesh) {
-                        child.material = material;
+                        // 设置填充材质
+                        child.material = fillMaterial;
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        
+                        // 为OBJ模型网格添加标识
+                        child.userData.isOBJModel = true;
+                        child.userData.originalMaterial = fillMaterial.clone();
+                        
+                        // 为每个网格创建边缘线框（只显示外轮廓）
+                        const edges = new THREE.EdgesGeometry(child.geometry);
+                        const edgesMaterial = new THREE.LineBasicMaterial({ 
+                            color: 0x000000,
+                            linewidth: 2
+                        });
+                        const edgesLine = new THREE.LineSegments(edges, edgesMaterial);
+                        
+                        // 确保线框与网格位置一致
+                        edgesLine.position.copy(child.position);
+                        edgesLine.rotation.copy(child.rotation);
+                        edgesLine.scale.copy(child.scale);
+                        
+                        // 将边缘线框添加到同一个父对象
+                        if (child.parent) {
+                            child.parent.add(edgesLine);
+                        }
                     }
                 });
+                
+                // 计算模型边界框并居中到原点
+                const box = new THREE.Box3().setFromObject(object);
+                const center = box.getCenter(new THREE.Vector3());
+                
+                // 将模型移动到原点
+                object.position.set(-center.x, -center.y, -center.z);
                 
                 this.meshGroup.add(object);
                 this.scene.add(this.meshGroup);
                 
-                // 调整相机视角
+                // 调整相机视角（使用居中后的对象）
                 this.fitCameraToObject(object);
                 
                 // 更新统计信息
@@ -1071,12 +1265,26 @@ class Web3DViewer {
                     renderTime: Math.round(endTime - startTime)
                 });
                 
+                // 通知加载完成
+                if (onProgress) {
+                    onProgress('加载完成', `已加载 ${meshCount} 个网格，${vertexCount} 个顶点`);
+                }
+                
                 console.log(`成功加载OBJ模型，${meshCount} 个网格，${vertexCount} 个顶点`);
+                
+                // 返回模型数据，包含组引用用于后续删除
+                resolve({
+                    modelData: object,
+                    meshGroup: this.meshGroup,
+                    meshCount: meshCount,
+                    vertexCount: vertexCount
+                });
             };
             
             reader.onerror = (error) => {
                 console.error('读取OBJ文件时出错:', error);
                 this.showError('读取OBJ文件失败');
+                reject(error);
             };
             
             reader.readAsText(file);
@@ -1084,7 +1292,9 @@ class Web3DViewer {
         } catch (error) {
             console.error('加载OBJ文件时出错:', error);
             this.showError('加载OBJ文件失败: ' + error.message);
+            reject(error);
         }
+        });
     }
     
     fitCameraToObject(object) {
@@ -1100,13 +1310,13 @@ class Web3DViewer {
         // 计算最大维度
         const maxDim = Math.max(size.x, size.y, size.z);
         
-        // 计算合适的相机距离
+        // 计算合适的相机距离，与XODR加载时保持一致
         const distance = maxDim * 2.5;
         
-        // 设置相机位置
+        // 设置相机位置 - 与XODR加载时保持一致的视角
         this.camera.position.set(
             center.x + distance * 0.6,
-            center.y + distance * 0.8,
+            center.y + distance * 0.8,  // 与fitCameraToRoads保持一致
             center.z + distance * 0.6
         );
         
@@ -1116,6 +1326,10 @@ class Web3DViewer {
         // 更新控制器目标到中心点
         this.controls.target.copy(center);
         this.controls.update();
+        
+        // 保存当前视角参数供resetView使用
+        this.defaultCameraPosition = this.camera.position.clone();
+        this.defaultCameraTarget = center.clone();
         
         // 调整网格和坐标轴大小
         if (this.gridHelper) {
@@ -1130,6 +1344,50 @@ class Web3DViewer {
             this.axesHelper = new THREE.AxesHelper(maxDim * 0.3);
             this.axesHelper.visible = this.settings.showAxes;
             this.scene.add(this.axesHelper);
+        }
+    }
+    
+    // 移除指定的模型
+    removeModel(modelData) {
+        if (!modelData) {
+            console.warn('没有提供模型数据');
+            return;
+        }
+        
+        // 优先处理新的数据结构（OBJ文件）
+        let targetGroup = modelData.meshGroup;
+        
+        // 处理SHP文件的roadGroup
+        if (!targetGroup && modelData.roadGroup) {
+            targetGroup = modelData.roadGroup;
+        }
+        
+        // 兼容旧的数据结构
+        if (!targetGroup && modelData.modelData) {
+            targetGroup = modelData.modelData.meshGroup;
+        }
+        
+        if (targetGroup) {
+            // 从场景中移除组
+            this.scene.remove(targetGroup);
+            
+            // 清理几何体和材质以释放内存
+            targetGroup.traverse((child) => {
+                if (child.geometry) {
+                    child.geometry.dispose();
+                }
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(material => material.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            });
+            
+            console.log('模型已从场景中移除');
+        } else {
+            console.warn('未找到要移除的模型组');
         }
     }
     

@@ -5,7 +5,7 @@ Open3D可视化器模块
 用于显示SHP文件和OpenDRIVE文件的3D可视化
 
 作者: ShpToOpenDrive项目组
-版本: 1.0.0
+版本: 1.3.0
 """
 
 import open3d as o3d

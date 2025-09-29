@@ -5,7 +5,7 @@
             "name": "Debug TestLane.shp Conversion",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py",
+            "program": "${workspaceFolder}/src/shp2xodr.py",
             "args": [
                 "${workspaceFolder}/data/test_lane/TestLane.shp",
                 "${workspaceFolder}/output/testlane_debug_output.xodr",
@@ -24,7 +24,7 @@
             "name": "Debug Lane.shp Conversion",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py",
+            "program": "${workspaceFolder}/src/shp2xodr.py",
             "args": [
                 "${workspaceFolder}/data/testODsample/wh2000/Lane.shp",
                 "${workspaceFolder}/debug_output.xodr",

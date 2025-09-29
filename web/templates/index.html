@@ -21,13 +21,14 @@
         <header class="header">
             <h1>ShpToOpenDrive - Web3D可视化</h1>
             <div class="controls">
-                <button id="loadSampleBtn" class="btn btn-primary">加载示例文件</button>
+                <button id="loadSampleBtn" class="btn btn-primary">清屏</button>
                 <input type="file" id="fileInput" accept=".shp,.shx,.dbf,.prj,.cpg,.sbn,.sbx,.xodr,.obj" multiple style="display: none;">
                 <button id="loadFileBtn" class="btn btn-secondary">上传文件</button>
                 <button id="resetViewBtn" class="btn btn-info">重置视角</button>
                 <div class="export-group">
                     <button id="exportXodrBtn" class="btn btn-success">导出XODR</button>
                     <button id="exportShpBtn" class="btn btn-success">导出SHP</button>
+                    <button id="exportObjBtn" class="btn btn-success">导出OBJ</button>
                 </div>
             </div>
         </header>
@@ -37,9 +38,16 @@
             <!-- 侧边栏 -->
             <aside class="sidebar">
                 <div class="panel">
+                    <h3>已加载文件</h3>
+                    <div id="fileList" class="file-list">
+                        <p class="no-files">未加载文件</p>
+                    </div>
+                </div>
+
+                <div class="panel">
                     <h3>文件信息</h3>
                     <div id="fileInfo">
-                        <p>未加载文件</p>
+                        <p>选择文件查看详情</p>
                     </div>
                 </div>
 
@@ -83,7 +91,8 @@
                 <div id="viewer" class="viewer"></div>
                 <div id="loading" class="loading" style="display: none;">
                     <div class="spinner"></div>
-                    <p>加载中...</p>
+                    <p id="loadingTitle">加载中...</p>
+                    <div id="loadingText" class="loading-text">请稍候</div>
                 </div>
                 <div id="error" class="error" style="display: none;"></div>
                 
@@ -177,64 +186,81 @@
                         </div>
                     </div>
                     
-                    <div class="option-group">
-                        <h4>坐标系设置</h4>
-                        <div class="form-group">
-                            <label for="exportCRS">坐标参考系统:</label>
-                            <select id="exportCRS" class="form-control">
-                                <option value="EPSG:4326">WGS84 (EPSG:4326)</option>
-                                <option value="EPSG:3857">Web Mercator (EPSG:3857)</option>
-                                <option value="EPSG:2154">RGF93 / Lambert-93 (EPSG:2154)</option>
-                                <option value="EPSG:32633">WGS84 / UTM zone 33N (EPSG:32633)</option>
-                                <option value="custom">自定义...</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="customCRSGroup" style="display: none;">
-                            <label for="customCRS">自定义CRS:</label>
-                            <input type="text" id="customCRS" class="form-control" placeholder="输入EPSG代码或PROJ字符串">
-                        </div>
-                    </div>
-                    
-                    <div class="option-group" id="shpOptions" style="display: none;">
-                        <h4>Shapefile选项</h4>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="includeAttributes" checked>
-                                包含属性信息
-                            </label>
-                        </div>
-                        <div class="form-group">
-                            <label for="geometryType">几何类型:</label>
-                            <select id="geometryType" class="form-control">
-                                <option value="LineString">线串 (LineString)</option>
-                                <option value="Point">点 (Point)</option>
-                                <option value="Polygon">多边形 (Polygon)</option>
-                            </select>
-                        </div>
-                    </div>
+
                     
                     <div class="option-group" id="xodrOptions" style="display: none;">
                         <h4>OpenDRIVE选项</h4>
                         <div class="form-group">
-                            <label for="xodrVersion">OpenDRIVE版本:</label>
-                            <select id="xodrVersion" class="form-control">
-                                <option value="1.7">1.7</option>
-                                <option value="1.6">1.6</option>
-                                <option value="1.5">1.5</option>
+                            <label for="configSelect">配置文件:</label>
+                            <select id="configSelect" class="form-control">
+                                <option value="default">默认配置 (default.json)</option>
+                                <option value="high_precision">高精度配置 (high_precision.json)</option>
+                                <option value="fast_processing">快速处理配置 (fast_processing.json)</option>
+                                <option value="lane_format">车道格式配置 (lane_format.json)</option>
+                                <option value="polynomial_curves">多项式曲线配置 (polynomial_curves.json)</option>
+                                <option value="spline_curves">样条曲线配置 (spline_curves.json)</option>
+                                <option value="urban_roads">城市道路配置 (urban_roads.json)</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="roadWidth">默认道路宽度 (米):</label>
-                            <input type="number" id="roadWidth" class="form-control" value="3.5" min="1" max="20" step="0.1">
-                        </div>
-                        <div class="form-group">
-                            <label for="laneCount">车道数量:</label>
-                            <input type="number" id="laneCount" class="form-control" value="2" min="1" max="8">
+                            <label for="geometryTolerance">几何容差:</label>
+                            <input type="number" id="geometryTolerance" class="form-control" value="1.0" min="0.1" max="10" step="0.1">
                         </div>
                         <div class="form-group">
                             <label>
-                                <input type="checkbox" id="includeElevation">
-                                包含高程信息
+                                <input type="checkbox" id="useArcFitting">
+                                使用圆弧拟合
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="useSmoothCurves" checked>
+                                使用平滑曲线
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="preserveDetail" checked>
+                                保留细节
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="option-group" id="objOptions" style="display: none;">
+                        <h4>OBJ选项</h4>
+                        <div class="form-group">
+                            <label for="objResolution">采样分辨率 (米):</label>
+                            <input type="number" id="objResolution" class="form-control" value="0.2" min="0.1" max="2.0" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="objEps">网格精度 (米):</label>
+                            <input type="number" id="objEps" class="form-control" value="0.1" min="0.01" max="1.0" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label for="qualityMode">质量模式:</label>
+                            <select id="qualityMode" class="form-control">
+                                <option value="medium">中级质量 (分辨率0.2米)</option>
+                                <option value="high">高质量 (分辨率0.1米，包含高度)</option>
+                                <option value="low">低质量 (分辨率0.5米)</option>
+                                <option value="custom">自定义</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="withLaneHeight">
+                                包含车道高度信息
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="withRoadObjects">
+                                包含道路对象 (实验性)
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="verboseOutput">
+                                详细输出信息
                             </label>
                         </div>
                     </div>

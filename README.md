@@ -37,12 +37,13 @@ ShpToOpenDrive/
 │   ├── lane_format.json    # Lane格式专用配置
 │   └── ...                 # 其他专用配置
 ├── src/                    # 源代码目录
-│   ├── main.py            # 主程序入口
+│   ├── shp2xodr.py        # SHP到XODR转换脚本（主程序）
+│   ├── xodr2obj.py        # XODR到OBJ转换脚本
 │   ├── shp_reader.py      # Shapefile读取器
 │   ├── geometry_converter.py # 几何转换器
 │   ├── opendrive_generator.py # OpenDRIVE生成器
 │   ├── xodr_parser.py     # OpenDRIVE解析器
-│   ├── xodr_to_obj_converter.py # 3D模型转换器
+│   ├── xodr_to_obj_converter.py # 3D模型转换器核心
 │   └── visualizer.py      # 可视化工具
 ├── web/                   # Web界面
 │   ├── web_server.py      # Web服务器
@@ -76,13 +77,13 @@ pip install -r requirements.txt
 3. 运行转换命令
 4. 在output/目录查看生成的.xodr文件
 
-## main.py使用方法
+## 转换脚本使用方法
 
-### 1. 命令行方式
+### 1. SHP到XODR转换 (shp2xodr.py)
 
 #### 基本语法
 ```bash
-python src/main.py <输入文件> <输出文件> [选项]
+python src/shp2xodr.py <输入文件> <输出文件> [选项]
 ```
 
 #### 命令行参数
@@ -99,29 +100,79 @@ python src/main.py <输入文件> <输出文件> [选项]
 #### 命令行使用示例
 ```bash
 # 基本转换
-python src/main.py data/test_lane/TestLane.shp output/TestLane.xodr
+python src/shp2xodr.py data/test_lane/TestLane.shp output/TestLane.xodr
 
 # 使用高精度配置
-python src/main.py data/testODsample/wh2000/Lane.shp output/Lane.xodr --config config/high_precision.json
+python src/shp2xodr.py data/testODsample/wh2000/Lane.shp output/Lane.xodr --config config/high_precision.json
 
 # 自定义参数转换
-python src/main.py data/testODsample/LaneTest.shp output/LaneTest.xodr --tolerance 0.5 --min-length 2.0 --use-arcs
+python src/shp2xodr.py data/testODsample/LaneTest.shp output/LaneTest.xodr --tolerance 0.5 --min-length 2.0 --use-arcs
 
 # 生成详细报告
-python src/main.py data/test_lane/TestLane.shp output/TestLane.xodr --report output/conversion_report.json --verbose
+python src/shp2xodr.py data/test_lane/TestLane.shp output/TestLane.xodr --report output/conversion_report.json --verbose
 
 # 转换并验证输出
-python src/main.py data/testODsample/wh2000/Lane.shp output/Lane.xodr --validate
+python src/shp2xodr.py data/testODsample/wh2000/Lane.shp output/Lane.xodr --validate
 
 # 快速处理大文件
-python src/main.py large_dataset.shp output/large_dataset.xodr --config config/fast_processing.json
+python src/shp2xodr.py large_dataset.shp output/large_dataset.xodr --config config/fast_processing.json
 ```
 
-### 2. Python脚本方式
+### 2. XODR到OBJ转换 (xodr2obj.py)
 
-#### 基本使用
+#### 基本语法
+```bash
+python src/xodr2obj.py <输入XODR文件> <输出OBJ文件> [选项]
+```
+
+#### 新功能特性 (v3.1.0)
+- **🎨 多车道材质支持**: 为每个车道生成独立的材质和颜色
+- **🔧 改进的网格算法**: 基于libOpenDRIVE的高精度车道边界计算
+- **📁 自动材质分组**: 根据车道ID自动生成材质名称（如lane_1, lane_neg_1等）
+- **📄 双文件输出**: 同时生成.obj网格文件和.mtl材质文件
+
+#### 命令行参数
+- `input`: 输入XODR文件路径（必需）
+- `output`: 输出OBJ文件路径（必需）
+- `--resolution, -r`: 采样分辨率（米），默认0.5米
+- `--with-height`: 包含车道高度信息
+- `--with-objects`: 包含道路对象（实验性功能）
+- `--eps`: 网格生成精度，默认0.1米
+- `--high-quality`: 高质量模式（分辨率0.1米，包含高度信息）
+- `--verbose, -v`: 显示详细输出信息
+- `--quiet, -q`: 静默模式，只显示错误信息
+
+#### 命令行使用示例
+```bash
+# 基本转换（支持多车道材质）
+python src/xodr2obj.py output/TestLane.xodr output/TestLane.obj
+
+# 高精度多车道转换
+python src/xodr2obj.py output/Lane.xodr output/Lane.obj --resolution 0.1 --with-height
+
+# 高质量模式（推荐用于多车道场景）
+python src/xodr2obj.py output/LaneTest.xodr output/LaneTest.obj --high-quality
+
+# 详细输出模式（查看车道材质生成过程）
+python src/xodr2obj.py output/TestLane.xodr output/TestLane.obj --verbose
+
+# 静默模式
+python src/xodr2obj.py output/Lane.xodr output/Lane.obj --quiet
+
+# 完整多车道转换流程示例
+python src/shp2xodr.py data/testODsample/LaneTest.shp output/LaneTest.xodr
+python src/xodr2obj.py output/LaneTest.xodr output/LaneTest_multi.obj --high-quality
+# 输出文件：LaneTest_multi.obj（网格）+ LaneTest_multi.mtl（多车道材质）
+
+# 测试多车道材质功能
+python src/xodr2obj.py output/wh2000_test.xodr output/wh2000_multi.obj 0.5 --debug
+```
+
+### 3. Python脚本方式
+
+#### SHP到XODR转换
 ```python
-from src.main import ShpToOpenDriveConverter
+from src.shp2xodr import ShpToOpenDriveConverter
 
 # 创建转换器实例
 converter = ShpToOpenDriveConverter()
@@ -141,7 +192,7 @@ else:
 #### 使用配置文件
 ```python
 import json
-from src.main import ShpToOpenDriveConverter
+from src.shp2xodr import ShpToOpenDriveConverter
 
 # 加载配置文件
 with open('config/high_precision.json', 'r', encoding='utf-8') as f:
@@ -155,6 +206,69 @@ result = converter.convert(
     'data/testODsample/wh2000/Lane.shp',
     'output/Lane.xodr'
 )
+```
+
+#### XODR到OBJ转换（支持多车道材质）
+```python
+from src.xodr_to_obj_converter import XODRToOBJConverter
+
+# 创建转换器实例（v3.1.0支持多车道材质）
+converter = XODRToOBJConverter(
+    resolution=0.5,  # 网格分辨率
+    lane_width=3.5   # 默认车道宽度
+)
+
+# 执行多车道转换
+success = converter.convert(
+    'output/TestLane.xodr',
+    'output/TestLane_multi.obj'  # 自动生成.mtl材质文件
+)
+
+if success:
+    print("多车道3D模型转换成功！")
+    print("输出文件：")
+    print("- TestLane_multi.obj（网格数据）")
+    print("- TestLane_multi.mtl（车道材质）")
+    
+    # 获取转换统计信息
+    stats = converter.get_conversion_stats()
+    print(f"生成车道数量: {stats.get('lane_count', 0)}")
+    print(f"材质分组数量: {stats.get('material_groups', 0)}")
+else:
+    print("3D模型转换失败！")
+```
+
+#### 完整转换流程
+```python
+from src.shp2xodr import ShpToOpenDriveConverter
+from src.xodr_to_obj_converter import XODRToOBJConverter
+
+# 第一步：SHP到XODR
+shp_converter = ShpToOpenDriveConverter()
+xodr_success = shp_converter.convert(
+    'data/testODsample/LaneTest.shp',
+    'output/LaneTest.xodr'
+)
+
+if xodr_success:
+    print("XODR转换成功！")
+    
+    # 第二步：XODR到OBJ
+    obj_converter = XODRToOBJConverter(
+        resolution=0.1,
+        with_lane_height=True
+    )
+    obj_success = obj_converter.convert(
+        'output/LaneTest.xodr',
+        'output/LaneTest.obj'
+    )
+    
+    if obj_success:
+        print("完整转换流程成功！")
+    else:
+        print("OBJ转换失败！")
+else:
+    print("XODR转换失败！")
 ```
 
 #### 自定义配置
@@ -187,20 +301,20 @@ result = converter.convert(
 # 使用测试脚本
 python test_testlane.py
 
-# 或直接调用main.py
-python src/main.py data/test_lane/TestLane.shp output/TestLane.xodr
+# 或直接调用shp2xodr.py
+python src/shp2xodr.py data/test_lane/TestLane.shp output/TestLane.xodr
 ```
 
 #### 标准测试
 ```bash
 # 标准测试数据集
-python src/main.py data/testODsample/wh2000/Lane.shp output/wh2000_Lane.xodr
+python src/shp2xodr.py data/testODsample/wh2000/Lane.shp output/wh2000_Lane.xodr
 ```
 
 #### 进阶测试
 ```bash
 # 进阶测试数据
-python src/main.py data/testODsample/LaneTest.shp output/LaneTest_advanced.xodr
+python src/shp2xodr.py data/testODsample/LaneTest.shp output/LaneTest_advanced.xodr
 ```
 
 ### 4. XODR文件解析和3D转换
@@ -225,19 +339,33 @@ for road in roads:
     print(f"道路 {road['id']} 包含 {len(points)} 个点")
 ```
 
-#### 3D模型转换
+#### 3D模型转换（多车道支持）
 ```python
 from src.xodr_to_obj_converter import XODRToOBJConverter
 
-# 创建3D转换器
-converter = XODRToOBJConverter()
+# 创建3D转换器（v3.1.0支持多车道材质）
+converter = XODRToOBJConverter(
+    resolution=0.5,  # 网格分辨率
+    lane_width=3.5   # 默认车道宽度
+)
 
-# 转换XODR到OBJ格式
-success = converter.convert('output/TestLane.xodr', 'output/TestLane.obj')
+# 转换XODR到多车道OBJ格式
+success = converter.convert('output/TestLane.xodr', 'output/TestLane_multi.obj')
 
 if success:
-    print("3D模型转换成功！")
-    print("可以在3D软件中打开 TestLane.obj 文件")
+    print("多车道3D模型转换成功！")
+    print("输出文件：")
+    print("- TestLane_multi.obj（3D网格，包含车道分组）")
+    print("- TestLane_multi.mtl（车道材质定义）")
+    print("可以在Blender、3ds Max等3D软件中打开，每个车道有独立材质")
+    
+    # 查看转换统计
+    stats = converter.get_conversion_stats()
+    print(f"\n转换统计：")
+    print(f"- 车道数量: {stats.get('lane_count', 0)}")
+    print(f"- 顶点数量: {stats.get('vertex_count', 0)}")
+    print(f"- 面片数量: {stats.get('face_count', 0)}")
+    print(f"- 材质分组: {stats.get('material_groups', 0)}")
 else:
     print("3D模型转换失败！")
 ```
@@ -274,7 +402,7 @@ for filename in os.listdir(data_dir):
             print(f"✗ {filename} -> XODR 转换失败")
 ```
 
-## Web前端使用指南
+## Web前端使用指南 (v1.3.0)
 
 ### 1. 启动Web服务器
 
@@ -301,17 +429,36 @@ python web/web_server.py
 
 服务器启动后，访问地址：**http://localhost:5000**
 
-### 2. Web界面功能详解
+### 2. Web界面功能详解 (v1.3.0 重大更新)
 
-#### 主要功能
-- **文件上传转换**: 支持拖拽上传Shapefile文件（.shp, .shx, .dbf, .prj）
-- **3D道路预览**: 实时3D可视化道路网络，基于Three.js高性能渲染
-- **交互式操作**: 鼠标控制视角，点击查看道路详细信息
-- **多格式支持**: 支持SHP输入、XODR输出，可选OBJ 3D模型导出
-- **实时反馈**: 转换进度和结果实时显示，支持错误诊断
-- **配置管理**: 在线选择和自定义转换配置参数
+#### 🎨 全新苹果风格设计
+- **简洁美观**: 采用苹果风格灰白色调设计，界面简洁流畅
+- **响应式布局**: 支持不同屏幕尺寸，自适应显示
+- **优化交互**: 流畅的动画效果和用户体验
+- **现代化UI**: 圆角设计、阴影效果、渐变色彩
+
+#### 📁 智能文件管理
+- **拖拽上传**: 支持拖拽文件到界面直接上传
+- **多格式支持**: 自动识别SHP、XODR、OBJ等格式
+- **智能验证**: 实时检查文件完整性和格式正确性
+- **清屏功能**: 一键清除所有文件，无需确认弹窗
 - **批量处理**: 支持多文件批量上传和转换
 - **格式验证**: 自动检测和验证文件格式完整性
+
+#### ⚙️ 高级转换选项
+- **配置文件选择**: 提供多种预设配置（默认、高精度、Lane格式等）
+- **参数调整**: 几何容差、曲线拟合、细节保留等选项
+- **导出模式**: 支持XODR、SHP、OBJ多种格式导出
+- **质量控制**: OBJ转换支持质量模式选择
+- **实时反馈**: 转换进度和结果实时显示，支持错误诊断
+
+#### 🎯 3D可视化增强
+- **实时渲染**: OpenDRIVE文件的实时3D预览
+- **交互控制**: 鼠标缩放、旋转、平移操作
+- **信息显示**: 道路几何信息实时显示（坐标、方向、曲率）
+- **视角重置**: 优化的相机位置，更好的观察角度
+- **性能优化**: 支持大规模道路网络流畅渲染
+- **基于Three.js**: 高性能3D渲染引擎
 
 #### 界面布局
 - **左侧面板**: 文件上传区域和操作控制
@@ -359,27 +506,21 @@ python web/web_server.py
    - 支持下载详细转换报告（JSON/PDF格式）
    - 提供转换统计信息和质量评估报告
 
-### 3. Web界面特色功能
+### 3. API接口 (v1.3.0)
 
-#### 苹果风格设计
-- 采用现代化苹果风格界面设计
-- 灰白色调，简洁美观
-- 流畅的动画效果和交互体验
-- 响应式布局，适配不同屏幕尺寸
+Web界面提供完整的RESTful API接口：
 
-#### 实时3D渲染
-- 基于Three.js的高性能3D渲染
-- 支持大规模道路网络可视化
-- 平滑的相机控制和视角切换
-- 优化的渲染性能，支持复杂道路结构
+#### 文件转换接口
+- `POST /api/export_xodr` - SHP到XODR转换
+- `POST /api/export_shp` - 数据导出为SHP格式
+- `POST /api/convert_xodr_to_obj` - XODR到OBJ转换（支持质量模式）
+- `POST /api/save_obj_data` - 保存OBJ数据
+- `POST /api/convert_obj_to_obj` - OBJ格式转换
 
-#### 智能文件处理
-- 自动检测文件格式和编码（UTF-8、GBK、ASCII等）
-- 智能错误提示和修复建议，提供详细诊断信息
-- 支持多种坐标系统自动转换（WGS84、UTM、地方坐标系）
-- 实时显示处理进度和状态，包含详细的处理步骤
-- 自动优化大文件处理，支持内存管理和分块处理
-- 提供文件完整性检查和数据质量评估
+#### 文件管理接口
+- `POST /api/upload_xodr` - 上传XODR文件
+- `GET /api/download/<filename>` - 下载生成的文件
+- `DELETE /api/clear` - 清除所有临时文件
 
 ### 4. 故障排除
 
@@ -505,12 +646,20 @@ Lane.shp格式自动识别以下属性：
 - 详细的车道属性和索引信息
 - 自动检测和处理复杂车道几何
 
-### 3D模型输出（OBJ格式）
-- **高质量网格**: 基于OpenDRIVE几何生成精确3D网格
-- **车道级渲染**: 支持单独车道的3D可视化
-- **材质支持**: 可配置不同车道类型的材质
-- **优化性能**: 自适应网格密度，平衡质量和性能
-- **标准兼容**: 支持主流3D软件导入（Blender、3ds Max等）
+### 3D模型输出（OBJ格式）- v3.1.0多车道增强
+- **🎨 多车道材质支持**: 每个车道自动生成独立材质和颜色
+- **🔧 高质量网格**: 基于libOpenDRIVE几何生成精确3D网格
+- **📁 智能材质分组**: 根据车道ID自动命名（lane_1, lane_neg_1等）
+- **📄 双文件输出**: 同时生成.obj网格文件和.mtl材质文件
+- **🎯 车道级渲染**: 支持单独车道的3D可视化和材质编辑
+- **⚡ 优化性能**: 自适应网格密度，平衡质量和性能
+- **🔗 标准兼容**: 支持主流3D软件导入（Blender、3ds Max、Maya等）
+
+#### 多车道材质特性
+- **自动颜色分配**: 每个车道使用不同的材质颜色
+- **材质属性完整**: 包含环境光、漫反射、镜面反射等完整材质属性
+- **车道ID映射**: 正向车道（lane_1, lane_2...）和负向车道（lane_neg_1, lane_neg_2...）
+- **3D软件友好**: 在3D软件中可直接选择和编辑单个车道材质
 
 ## 输出验证和质量保证
 
@@ -542,7 +691,7 @@ Lane.shp格式自动识别以下属性：
 ### 验证工具
 ```bash
 # 使用内置验证功能
-python src/main.py input.shp output.xodr --validate
+python src/shp2xodr.py input.shp output.xodr --validate
 
 # 单独验证已有XODR文件
 python -c "from src.xodr_parser import XODRParser; parser = XODRParser(); result = parser.validate_file('output.xodr'); print('验证通过' if result else '验证失败')"
@@ -555,19 +704,25 @@ python -c "from src.xodr_parser import XODRParser; parser = XODRParser(); result
 ### 更新日志
 
 #### v1.3.0 (2025-01-22)
-- 🎨 **Web前端重大升级**：
+- 🎨 **Web界面全面优化**：
   - 全新苹果风格界面设计，灰白色调简洁美观
+  - 清屏功能直接执行，移除确认弹窗
+  - 简化导出选项，删除冗余的OpenDRIVE和SHP导出参数
   - 优化3D道路可视化，支持实时交互和信息查看
-  - 改进线条信息显示，移除冗余信息，保留核心数据
-  - 优化重置视角功能，相机位置更加合理
-- 🔧 **核心功能增强**：
+  - 改进重置视角功能，相机位置更加合理
+- 🔧 **API接口扩展**：
+  - 新增export_xodr、export_shp、convert_xodr_to_obj等完整API接口
+  - 支持质量模式选择和双模式操作
+  - 完善文件管理接口，支持上传、下载、清除操作
+  - 优化错误处理和用户提示
+- 🚀 **核心功能增强**：
   - 新增XodrToObjConverter模块，支持OpenDRIVE到OBJ格式转换
   - 完善XodrParser解析器，增强文件验证和数据提取能力
   - 优化道路参考线算法，提高几何精度
   - 改进道路宽度识别算法，支持变宽车道处理
 - 📚 **文档完善**：
   - 全面更新README文档，添加详细使用指南
-  - 完善main.py使用方法说明
+  - 完善API文档，记录所有新增接口
   - 新增Web前端使用指南和故障排除
   - 更新项目结构和配置说明
 

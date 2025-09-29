@@ -211,10 +211,10 @@
 
 ```bash
 # 使用默认配置
-python src/main.py input.shp output.xodr
+python src/shp2xodr.py input.shp output.xodr
 
 # 使用指定配置文件
-python src/main.py input.shp output.xodr --config config/high_precision.json
+python src/shp2xodr.py input.shp output.xodr --config config/high_precision.json
 ```
 
 ### 2. Python脚本方式

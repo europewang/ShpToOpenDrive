@@ -5,7 +5,7 @@ OpenDRIVE文件解析器
 用于解析和提取OpenDRIVE文件中的几何信息
 
 作者: ShpToOpenDrive项目组
-版本: 1.0.0
+版本: 1.3.0
 """
 
 import xml.etree.ElementTree as ET

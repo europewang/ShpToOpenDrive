@@ -425,7 +425,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Main as main.py
+    participant Main as shp2xodr.py
     participant Config as 配置系统
     participant DefaultConfig as 默认配置
     participant UserConfig as 用户配置文件

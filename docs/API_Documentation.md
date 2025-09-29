@@ -19,12 +19,13 @@ ShpToOpenDrive 是一个将 Shapefile 格式的道路数据转换为 OpenDrive �
 
 ```
 src/
-├── main.py                    # 主程序和转换器
+├── shp2xodr.py                # SHP到XODR转换脚本（主程序）
+├── xodr2obj.py                # XODR到OBJ转换脚本（独立工具）
 ├── shp_reader.py              # Shapefile 读取模块
 ├── geometry_converter.py      # 几何转换模块
 ├── opendrive_generator.py     # OpenDrive 生成模块
-├── xodr_parser.py             # OpenDRIVE 文件解析器（新增）
-├── xodr_to_obj_converter.py   # 3D模型转换器（新增）
+├── xodr_parser.py             # OpenDRIVE 文件解析器
+├── xodr_to_obj_converter.py   # 3D模型转换器核心
 └── visualizer.py              # 可视化工具
 ```
 
@@ -33,7 +34,7 @@ src/
 ### 主要转换流程
 
 ```
-main.py (ShapefileToOpenDriveConverter)
+shp2xodr.py (ShapefileToOpenDriveConverter)
     ↓
     ├── ShapefileReader.load_shapefile()           # 加载shapefile文件
     ├── ShapefileReader.extract_road_geometries()  # 提取道路几何数据
@@ -48,6 +49,13 @@ main.py (ShapefileToOpenDriveConverter)
     ├── OpenDriveGenerator.create_road_from_segments() # 创建道路
     │   └── OpenDriveGenerator._create_planview_from_segments() # 创建平面视图
     └── OpenDriveGenerator.generate_file()         # 生成文件
+
+xodr2obj.py (XODR到OBJ转换脚本)
+    ↓
+    └── XODRToOBJConverter.convert()               # 主转换接口
+        ├── XODRToOBJConverter._generate_road_mesh() # 生成道路网格
+        ├── XODRToOBJConverter._export_obj_file()  # 导出OBJ文件
+        └── XODRToOBJConverter._export_materials() # 导出材质文件
 ```
 
 ### 核心模块功能说明
@@ -974,7 +982,7 @@ _create_lane_section_from_surfaces(self, lane_surfaces: List[Dict], attributes: 
 
 ---
 
-## 4. main.py - 主程序模块
+## 4. shp2xodr.py - SHP到XODR转换模块
 
 ### 模块说明
 整合所有功能模块，提供完整的转换流程和命令行接口。
@@ -1206,11 +1214,11 @@ _extract_segments_from_lane_surfaces(self, lane_surfaces: List[Dict]) -> List[Di
 
 ### 命令行接口
 
-#### main() 函数
+#### shp2xodr.py - SHP到XODR转换脚本
 ```python
 main()
 ```
-**功能:** 命令行主函数，解析参数并执行转换
+**功能:** SHP到XODR转换的命令行主函数
 
 **命令行参数:**
 - `input`: 输入 Shapefile 路径（必需）
@@ -1223,13 +1231,45 @@ main()
 
 **使用示例:**
 ```bash
-python -m src.main input.shp output.xodr --tolerance 0.5 --use-arcs --report report.json
+python src/shp2xodr.py input.shp output.xodr --tolerance 0.5 --use-arcs --report report.json
+```
+
+#### xodr2obj.py - XODR到OBJ转换脚本
+```python
+main()
+```
+**功能:** XODR到OBJ转换的命令行主函数，基于libOpenDRIVE架构
+
+**命令行参数:**
+- `input`: 输入 XODR 文件路径（必需）
+- `output`: 输出 OBJ 文件路径（必需）
+- `--resolution, -r`: 采样分辨率（米），默认0.5米
+- `--with-height`: 包含车道高度信息
+- `--with-objects`: 包含道路对象（实验性功能）
+- `--eps`: 网格生成精度，默认0.1米
+- `--high-quality`: 高质量模式（分辨率0.1米，包含高度信息）
+- `--verbose, -v`: 显示详细输出信息
+- `--quiet, -q`: 静默模式，只显示错误信息
+
+**使用示例:**
+```bash
+# 基本转换
+python src/xodr2obj.py input.xodr output.obj
+
+# 高精度转换
+python src/xodr2obj.py input.xodr output.obj --resolution 0.1 --with-height
+
+# 高质量模式
+python src/xodr2obj.py input.xodr output.obj --high-quality
+
+# 详细输出
+python src/xodr2obj.py input.xodr output.obj --verbose
 ```
 
 **命令行快速转换示例:**
 ```bash
 # 使用默认配置转换
-python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/example_config.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/CenterLane.shp', 'output/CenterLane.xodr'); print('转换成功!' if result else '转换失败!')"
+python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/default.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/CenterLane.shp', 'output/CenterLane.xodr'); print('转换成功!' if result else '转换失败!')"
 
 # 使用高精度配置转换
 python -c "from src.main import ShpToOpenDriveConverter; import json; config = json.load(open('config/high_precision.json', 'r', encoding='utf-8')); converter = ShpToOpenDriveConverter(config); result = converter.convert('data/sample_roads.shp', 'output/sample_roads.xodr'); print('转换成功!' if result else '转换失败!')"
@@ -1434,11 +1474,143 @@ generate_road_points(self, road_data: Dict, resolution: float = 1.0) -> List[Tup
 }
 ```
 
+### /api/export_xodr
+**方法:** POST
+**功能:** 导出当前加载的Shapefile数据为OpenDRIVE格式
+
+**请求参数:**
+```json
+{
+  "fileName": "output.xodr",
+  "configFile": "default",
+  "geometryTolerance": 1.0,
+  "useArcFitting": false,
+  "useSmoothCurves": true,
+  "preserveDetail": true
+}
+```
+
+**响应格式:**
+- 成功时返回XODR文件作为附件下载
+- 失败时返回错误信息JSON
+
+### /api/export_shp
+**方法:** POST
+**功能:** 导出当前加载的数据为Shapefile格式
+
+**请求参数:**
+```json
+{
+  "fileName": "output.shp"
+}
+```
+
+**响应格式:**
+- 成功时返回SHP文件作为附件下载
+- 失败时返回错误信息JSON
+
+### /api/convert_xodr_to_obj
+**方法:** POST
+**功能:** 将XODR文件转换为OBJ 3D模型格式
+
+**支持两种模式:**
+
+#### 1. 文件上传模式（兼容旧功能）
+**请求参数:**
+- `files`: 包含XODR文件的文件列表
+
+#### 2. JSON参数模式（新导出功能）
+**请求参数:**
+```json
+{
+  "resolution": 0.2,
+  "eps": 0.1,
+  "qualityMode": "medium",
+  "withLaneHeight": false,
+  "withRoadObjects": false,
+  "verboseOutput": false
+}
+```
+
+**质量模式说明:**
+- `high`: 高质量（resolution=0.1, withLaneHeight=true）
+- `medium`: 中等质量（resolution=0.2, withLaneHeight=false）
+- `low`: 低质量（resolution=0.5, withLaneHeight=false）
+
+**响应格式:**
+- 成功时返回OBJ文件作为附件下载
+- 失败时返回错误信息JSON
+
+### /api/save_obj_data
+**方法:** POST
+**功能:** 保存上传的OBJ文件数据到服务器内存
+
+**请求参数:**
+- `files`: 包含OBJ文件的文件列表
+
+**响应格式:**
+```json
+{
+  "success": true,
+  "message": "OBJ数据已保存",
+  "filename": "model.obj"
+}
+```
+
+### /api/convert_obj_to_obj
+**方法:** POST
+**功能:** 重新导出已保存的OBJ文件
+
+**请求参数:**
+```json
+{
+  "fileName": "output.obj"
+}
+```
+
+**响应格式:**
+- 成功时返回OBJ文件作为附件下载
+- 失败时返回错误信息JSON
+
 ---
 
 ## 最近更新
 
-### v1.2.0 (最新版本)
+### v1.3.0 (最新版本)
+
+#### 新增功能
+1. **Web界面优化**: 全面改进用户体验
+   - **清屏功能优化**: 点击清屏按钮直接清除，无需确认弹窗
+   - **导出选项简化**: 移除OpenDRIVE导出中的默认车道宽度、车道数量、限速选项
+   - **界面精简**: 删除SHP导出中的Shapefile选项组块
+   - **苹果风格设计**: 现代化的灰色色调界面设计
+
+2. **API接口扩展**: 完善的Web API体系
+   - `POST /api/export_xodr`: OpenDRIVE导出接口，支持配置参数
+   - `POST /api/export_shp`: Shapefile导出接口，简化参数
+   - `POST /api/convert_xodr_to_obj`: OBJ转换接口，支持双模式操作
+   - `POST /api/save_obj_data`: OBJ数据保存接口
+   - `POST /api/convert_obj_to_obj`: OBJ重新导出接口
+
+3. **OBJ转换增强**: 高质量3D模型生成
+   - **质量模式**: 支持高、中、低三种质量模式
+   - **参数自动调整**: 根据质量模式自动优化分辨率和细节
+   - **双模式支持**: 文件上传模式和JSON参数模式
+   - **内存管理**: 优化的文件数据缓存机制
+
+4. **配置系统优化**: 灵活的参数配置
+   - **配置文件选择**: 支持多种预设配置文件
+   - **几何容差调整**: 可调节的几何处理精度
+   - **曲线拟合选项**: 圆弧拟合和平滑曲线选项
+   - **细节保留控制**: 可控的几何细节保留程度
+
+#### 算法优化
+- **导出流程优化**: 简化的导出参数和更直观的用户界面
+- **文件路径管理**: 自动保存当前XODR文件路径，支持无文件上传的OBJ转换
+- **错误处理增强**: 完善的错误提示和异常处理机制
+- **性能优化**: 优化的文件处理和内存使用
+
+### v1.2.0
 
 #### 新增功能
 1. **车道面生成系统**: 全新的车道面处理架构
@@ -1512,11 +1684,21 @@ python validate_xodr.py
 
 ## 版本信息
 
-**当前版本**: v1.2.0  
+**当前版本**: v1.3.0  
 **更新日期**: 2025年1月  
 **兼容性**: Python 3.7+, OpenDRIVE 1.4+
 
 ### 更新日志
+
+#### v1.3.0 (2025年1月)
+- **重大更新**: Web界面全面优化，提升用户体验
+- **新增功能**: 完善的Web API体系，支持多种导出和转换操作
+- **界面优化**: 清屏功能直接执行，简化导出选项，精简界面设计
+- **API扩展**: 新增export_xodr、export_shp、convert_xodr_to_obj等接口
+- **OBJ转换增强**: 支持质量模式选择和双模式操作
+- **配置系统**: 灵活的参数配置和预设选项
+- **性能优化**: 文件路径管理和内存使用优化
+- **错误处理**: 完善的异常处理和用户提示
 
 #### v1.2.0 (2025年1月)
 - **重大更新**: 新增车道面生成系统，支持从车道面数据创建道路
@@ -1547,12 +1729,12 @@ python validate_xodr.py
 
 ---
 
-## v1.2.0 版本总结
+## v1.3.0 版本总结
 
 ### 核心改进
 
 #### 1. 车道面生成系统
-v1.2.0版本引入了全新的车道面处理架构，支持从复杂的车道面数据创建精确的OpenDRIVE道路：
+v1.3.0版本在v1.2.0基础上进行了重大升级，特别是Web界面和API接口的全面优化，同时保持了车道面处理架构的所有功能：
 
 - **智能参考线计算**: 自动计算多车道面的平均中心线作为道路参考线
 - **变宽车道支持**: 精确处理宽度变化超过0.1米的车道
@@ -1586,7 +1768,7 @@ v1.2.0版本引入了全新的车道面处理架构，支持从复杂的车道�
 
 ### 应用场景
 
-v1.2.0版本特别适用于：
+v1.3.0版本特别适用于：
 
 1. **复杂道路建模**: 多车道、变宽车道的精确建模
 2. **高精度仿真**: 自动驾驶仿真对道路几何的高精度要求
@@ -1595,7 +1777,7 @@ v1.2.0版本特别适用于：
 
 ### 兼容性
 
-- **向后兼容**: 完全兼容v1.1.0的所有功能
+- **向后兼容**: 完全兼容v1.2.0和v1.1.0的所有功能
 - **数据格式**: 支持Road.shp和Lane.shp两种数据格式
 - **OpenDRIVE标准**: 符合OpenDRIVE 1.4+标准
 - **Python版本**: 支持Python 3.7+
@@ -1702,6 +1884,15 @@ convert(self, xodr_file: str, obj_file: str) -> bool
 
 **功能:** 主转换接口，完成从XODR到OBJ的完整转换流程
 
+**新增功能 (v3.1.0):**
+- **多车道材质支持**: 为每个车道生成独立的材质和颜色
+- **动态材质分组**: 根据车道ID自动生成材质名称（如lane_1, lane_neg_1等）
+- **改进的网格算法**: 基于libOpenDRIVE的高精度车道边界计算
+
+**输出文件:**
+- `.obj` 文件：包含3D网格数据和多车道材质引用
+- `.mtl` 文件：包含每个车道的独立材质定义
+
 ###### convert_xodr_to_obj()
 ```python
 convert_xodr_to_obj(self, xodr_data: Dict, obj_file: str) -> bool
@@ -1724,17 +1915,36 @@ get_conversion_stats(self) -> Dict
 
 ##### 内部方法
 
-- `_generate_road_mesh()` - 生成单条道路的3D网格
+**核心网格生成方法:**
+- `_generate_road_mesh_improved()` - 生成改进的道路网格（支持多车道）
+- `_generate_individual_lane_mesh()` - 生成单个车道的3D网格（新增）
 - `_generate_road_centerline()` - 生成道路中心线
 - `_generate_geometry_points()` - 生成几何点坐标
 - `_create_road_surface()` - 创建道路表面网格
+
+**文件导出方法:**
 - `_export_obj_file()` - 导出OBJ格式文件
+- `_export_materials()` - 导出多车道材质文件（改进）
 - `_write_vertices()` - 写入顶点数据
 - `_write_faces()` - 写入面数据
 
+**多车道支持方法 (v3.1.0新增):**
+- `get_road_network_mesh()` - 获取整个道路网络的合并网格
+- 材质分组管理 - 根据车道ID自动分配材质
+
 #### 3D网格生成算法
 
-##### 道路表面网格
+##### 多车道网格生成 (v3.1.0改进)
+1. **车道识别**: 解析XODR文件中的车道信息，识别每个车道的ID和属性
+2. **独立网格生成**: 为每个车道单独生成3D网格
+   - 使用libOpenDRIVE计算精确的车道边界
+   - 根据车道宽度和偏移量确定顶点位置
+3. **材质分配**: 根据车道ID自动生成材质名称
+   - 正向车道：`lane_1`, `lane_2`, `lane_3`...
+   - 负向车道：`lane_neg_1`, `lane_neg_2`, `lane_neg_3`...
+4. **网格合并**: 将所有车道网格合并为统一的道路网格，保持材质分组
+
+##### 传统道路表面网格
 1. **中心线采样**: 根据分辨率对道路中心线进行采样
 2. **横截面生成**: 在每个采样点生成垂直于中心线的横截面
 3. **顶点计算**: 计算道路边界的顶点坐标
