@@ -142,103 +142,49 @@ class RoadLineConnectionManager:
         return self.successor_map.get(road_id, [])
         
     def _calculate_node_headings(self) -> None:
-        """计算每个节点的统一朝向（横截面方向）
+        """计算每个节点的统一斜率
         
-        基于同一RoadID下不同Index线段的节点连线垂直斜率计算朝向：
-        - 头节点朝向：同一RoadID下任意两个不同Index线段的SNodeID连线的垂直斜率
-        - 尾节点朝向：同一RoadID下任意两个不同Index线段的ENodeID连线的垂直斜率
+        对于每个节点，计算所有相关联道路线在该节点处的斜率平均值，
+        并存储在node_headings字典中。
         """
-        logger.info("开始计算道路线节点统一朝向（基于同一RoadID不同Index节点连线垂直斜率）")
-        print("开始计算道路线节点统一朝向（基于同一RoadID不同Index节点连线垂直斜率）")
+        logger.info("开始计算道路线节点统一斜率")
+        print("开始计算道路线节点统一斜率")
         
-        # 清空之前的节点朝向数据
+        # 清空之前的节点斜率数据
         self.node_headings.clear()
         
-        # 按RoadID分组收集道路线信息
-        road_groups = {}
-        for road_id, road_info in self.road_lines.items():
-            road_id_num = road_info.get('road_id')
-            if road_id_num not in road_groups:
-                road_groups[road_id_num] = []
-            road_groups[road_id_num].append(road_info)
-        
-        # 为每个RoadID计算节点朝向
-        for road_id_num, road_list in road_groups.items():
-            if len(road_list) < 2:
-                continue  # 需要至少两条不同Index的线段
+        # 遍历所有节点
+        for node_id, connections in self.node_connections.items():
+            incoming_headings = []
+            outgoing_headings = []
             
-            # 收集所有起始节点和结束节点
-            start_nodes = []
-            end_nodes = []
-            for road_info in road_list:
-                start_node_id = road_info.get('start_node_id')
-                end_node_id = road_info.get('end_node_id')
-                start_coords = road_info.get('start_coords')
-                end_coords = road_info.get('end_coords')
-                
-                if start_node_id and start_coords:
-                    start_nodes.append({
-                        'node_id': start_node_id,
-                        'coords': start_coords
-                    })
-                if end_node_id and end_coords:
-                    end_nodes.append({
-                        'node_id': end_node_id,
-                        'coords': end_coords
-                    })
+            # 收集所有进入该节点的道路线的终点斜率
+            for road_id in connections.get('incoming', []):
+                road_info = self.road_lines.get(road_id)
+                if road_info and road_info.get('end_heading') is not None:
+                    incoming_headings.append(road_info['end_heading'])
             
-            # 计算起始节点朝向（基于不同Index线段的SNodeID连线垂直斜率）
-            if len(start_nodes) >= 2:
-                node1 = start_nodes[0]
-                node2 = start_nodes[1]
-                
-                # 计算两个节点之间的连线方向
-                dx = node2['coords'][0] - node1['coords'][0]
-                dy = node2['coords'][1] - node1['coords'][1]
-                
-                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
-                    # 连线方向角
-                    line_heading = math.atan2(dy, dx)
-                    # 垂直方向（加90°）
-                    perpendicular_heading = line_heading + math.pi / 2
-                    # 标准化角度到 [-π, π] 范围
-                    while perpendicular_heading > math.pi:
-                        perpendicular_heading -= 2 * math.pi
-                    while perpendicular_heading < -math.pi:
-                        perpendicular_heading += 2 * math.pi
-                    
-                    # 为所有起始节点设置相同的朝向
-                    for node in start_nodes:
-                        self.node_headings[node['node_id']] = perpendicular_heading
-                        logger.debug(f"RoadID {road_id_num} 起始节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+            # 收集所有从该节点出发的道路线的起点斜率
+            for road_id in connections.get('outgoing', []):
+                road_info = self.road_lines.get(road_id)
+                if road_info and road_info.get('start_heading') is not None:
+                    outgoing_headings.append(road_info['start_heading'])
             
-            # 计算结束节点朝向（基于不同Index线段的ENodeID连线垂直斜率）
-            if len(end_nodes) >= 2:
-                node1 = end_nodes[0]
-                node2 = end_nodes[1]
+            # 合并所有斜率数据
+            all_headings = incoming_headings + outgoing_headings
+            
+            if len(all_headings) >= 2:
+                # 计算平均斜率（考虑角度的周期性）
+                avg_heading = self._calculate_average_heading(all_headings)
+                self.node_headings[node_id] = avg_heading
+                logger.debug(f"节点 {node_id} 统一斜率: {math.degrees(avg_heading):.2f}°")
+            elif len(all_headings) == 1:
+                # 只有一个斜率，直接使用
+                self.node_headings[node_id] = all_headings[0]
+                logger.debug(f"节点 {node_id} 单一斜率: {math.degrees(all_headings[0]):.2f}°")
                 
-                # 计算两个节点之间的连线方向
-                dx = node2['coords'][0] - node1['coords'][0]
-                dy = node2['coords'][1] - node1['coords'][1]
-                
-                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
-                    # 连线方向角
-                    line_heading = math.atan2(dy, dx)
-                    # 垂直方向（加90°）
-                    perpendicular_heading = line_heading + math.pi / 2
-                    # 标准化角度到 [-π, π] 范围
-                    while perpendicular_heading > math.pi:
-                        perpendicular_heading -= 2 * math.pi
-                    while perpendicular_heading < -math.pi:
-                        perpendicular_heading += 2 * math.pi
-                    
-                    # 为所有结束节点设置相同的朝向
-                    for node in end_nodes:
-                        self.node_headings[node['node_id']] = perpendicular_heading
-                        logger.debug(f"RoadID {road_id_num} 结束节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
-                
-        logger.info(f"计算完成，共 {len(self.node_headings)} 个节点有统一朝向")
-        print(f"道路线节点统一朝向计算完成，共 {len(self.node_headings)} 个节点有统一朝向")
+        logger.info(f"计算完成，共 {len(self.node_headings)} 个节点有统一斜率")
+        print(f"道路线节点统一斜率计算完成，共 {len(self.node_headings)} 个节点有统一斜率")
         
     def _calculate_average_heading(self, headings: List[float]) -> float:
         """改进的平均航向角计算方法（考虑角度的周期性）
@@ -435,7 +381,26 @@ class RoadConnectionManager:
         logger.info(f"连接关系构建完成，共处理 {len(self.road_surfaces)} 个道路面")
         logger.info(f"前继关系: {len(self.predecessor_map)} 个，后继关系: {len(self.successor_map)} 个")
 
-        # 注意：不再计算连接处的平均航向角，改用基于节点朝向的统一斜率计算
+        # 计算并存储连接处的平均航向角
+        for surface_id, predecessors in self.predecessor_map.items():
+            for pred_id in predecessors:
+                # 前继的终点航向角和当前道路的起点航向角
+                pred_end_heading = self.road_surfaces[pred_id]['end_heading']
+                curr_start_heading = self.road_surfaces[surface_id]['start_heading']
+                # 使用向量平均法计算连接处航向角
+                avg_heading = self._calculate_average_heading([pred_end_heading, curr_start_heading])
+                self.connection_headings[(pred_id, surface_id)] = avg_heading
+                logger.debug(f"连接 ({pred_id}, {surface_id}) 的平均航向角: {math.degrees(avg_heading):.2f}°")
+
+        for surface_id, successors in self.successor_map.items():
+            for succ_id in successors:
+                # 当前道路的终点航向角和后继的起点航向角
+                curr_end_heading = self.road_surfaces[surface_id]['end_heading']
+                succ_start_heading = self.road_surfaces[succ_id]['start_heading']
+                # 使用向量平均法计算连接处航向角
+                avg_heading = self._calculate_average_heading([curr_end_heading, succ_start_heading])
+                self.connection_headings[(surface_id, succ_id)] = avg_heading
+                logger.debug(f"连接 ({surface_id}, {succ_id}) 的平均航向角: {math.degrees(avg_heading):.2f}°")
 
         # 计算并存储节点的统一斜率
         self._calculate_node_headings()
@@ -465,128 +430,48 @@ class RoadConnectionManager:
     def _calculate_node_headings(self) -> None:
         """计算每个节点的统一斜率
         
-        基于同一RoadID下不同Index道路面的节点连线垂直斜率计算朝向：
-        - 头节点朝向：同一RoadID下任意两个不同Index道路面的SNodeID连线的垂直斜率
-        - 尾节点朝向：同一RoadID下任意两个不同Index道路面的ENodeID连线的垂直斜率
+        对于每个节点，计算所有相关联道路在该节点处的斜率平均值，
+        并存储在node_headings字典中。
         """
-        logger.info("开始计算节点统一斜率（基于同一RoadID不同Index节点连线垂直斜率）")
+        logger.info("开始计算节点统一斜率")
         
         # 清空之前的节点斜率数据
         self.node_headings.clear()
         
-        # 按RoadID分组收集道路面信息
-        road_groups = {}
-        for surface_id, surface_info in self.road_surfaces.items():
-            # 从surface_id中提取RoadID (格式: "road_id_left_index_right_index")
-            try:
-                parts = surface_id.split('_')
-                if len(parts) >= 3:
-                    road_id_num = int(parts[0])
-                else:
-                    continue  # 跳过格式不正确的surface_id
-            except (ValueError, IndexError):
-                continue  # 跳过无法解析的surface_id
+        # 遍历所有节点
+        for node_id, connections in self.node_connections.items():
+            incoming_headings = []
+            outgoing_headings = []
             
-            if road_id_num not in road_groups:
-                road_groups[road_id_num] = []
+            # 收集所有进入该节点的道路的终点斜率
+            for surface_id in connections.get('incoming', []):
+                surface_info = self.road_surfaces.get(surface_id)
+                if surface_info and surface_info.get('end_heading') is not None:
+                    incoming_headings.append(surface_info['end_heading'])
             
-            # 获取节点坐标
-            surface_data = surface_info.get('data', {})
-            s_node_id = surface_info.get('s_node_id')
-            e_node_id = surface_info.get('e_node_id')
+            # 收集所有从该节点出发的道路的起点斜率
+            for surface_id in connections.get('outgoing', []):
+                surface_info = self.road_surfaces.get(surface_id)
+                if surface_info and surface_info.get('start_heading') is not None:
+                    outgoing_headings.append(surface_info['start_heading'])
             
-            # 从几何数据中获取起始和结束坐标
-            geometry = surface_data.get('geometry')
-            if geometry and hasattr(geometry, 'coords'):
-                coords = list(geometry.coords)
-                if len(coords) >= 2:
-                    start_coords = coords[0]
-                    end_coords = coords[-1]
-                    
-                    road_groups[road_id_num].append({
-                        'surface_id': surface_id,
-                        's_node_id': s_node_id,
-                        'e_node_id': e_node_id,
-                        'start_coords': start_coords,
-                        'end_coords': end_coords
-                    })
-        
-        # 为每个RoadID计算节点朝向
-        for road_id_num, surface_list in road_groups.items():
-            if len(surface_list) < 2:
-                continue  # 需要至少两个不同Index的道路面
+            # 合并所有斜率数据
+            all_headings = incoming_headings + outgoing_headings
             
-            # 收集所有起始节点和结束节点
-            start_nodes = []
-            end_nodes = []
-            for surface_info in surface_list:
-                s_node_id = surface_info.get('s_node_id')
-                e_node_id = surface_info.get('e_node_id')
-                start_coords = surface_info.get('start_coords')
-                end_coords = surface_info.get('end_coords')
-                
-                if s_node_id and start_coords:
-                    start_nodes.append({
-                        'node_id': s_node_id,
-                        'coords': start_coords
-                    })
-                if e_node_id and end_coords:
-                    end_nodes.append({
-                        'node_id': e_node_id,
-                        'coords': end_coords
-                    })
-            
-            # 计算起始节点朝向（基于不同Index道路面的SNodeID连线垂直斜率）
-            if len(start_nodes) >= 2:
-                node1 = start_nodes[0]
-                node2 = start_nodes[1]
-                
-                # 计算两个节点之间的连线方向
-                dx = node2['coords'][0] - node1['coords'][0]
-                dy = node2['coords'][1] - node1['coords'][1]
-                
-                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
-                    # 连线方向角
-                    line_heading = math.atan2(dy, dx)
-                    # 垂直方向（加90°）
-                    perpendicular_heading = line_heading + math.pi / 2
-                    # 标准化角度到 [-π, π] 范围
-                    while perpendicular_heading > math.pi:
-                        perpendicular_heading -= 2 * math.pi
-                    while perpendicular_heading < -math.pi:
-                        perpendicular_heading += 2 * math.pi
-                    
-                    # 为所有起始节点设置相同的朝向
-                    for node in start_nodes:
-                        self.node_headings[node['node_id']] = perpendicular_heading
-                        logger.debug(f"RoadID {road_id_num} 起始节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
-                        print(f"RoadID {road_id_num} 起始节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
-            
-            # 计算结束节点朝向（基于不同Index道路面的ENodeID连线垂直斜率）
-            if len(end_nodes) >= 2:
-                node1 = end_nodes[0]
-                node2 = end_nodes[1]
-                
-                # 计算两个节点之间的连线方向
-                dx = node2['coords'][0] - node1['coords'][0]
-                dy = node2['coords'][1] - node1['coords'][1]
-                
-                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
-                    # 连线方向角
-                    line_heading = math.atan2(dy, dx)
-                    # 垂直方向（加90°）
-                    perpendicular_heading = line_heading + math.pi / 2
-                    # 标准化角度到 [-π, π] 范围
-                    while perpendicular_heading > math.pi:
-                        perpendicular_heading -= 2 * math.pi
-                    while perpendicular_heading < -math.pi:
-                        perpendicular_heading += 2 * math.pi
-                    
-                    # 为所有结束节点设置相同的朝向
-                    for node in end_nodes:
-                        self.node_headings[node['node_id']] = perpendicular_heading
-                        logger.debug(f"RoadID {road_id_num} 结束节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
-                        print(f"RoadID {road_id_num} 结束节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+            if len(all_headings) >= 2:
+                # 计算平均斜率（考虑角度的周期性）
+                avg_heading = self._calculate_average_heading(all_headings)
+                self.node_headings[node_id] = avg_heading
+                logger.debug(f"节点 {node_id} 的统一斜率: {math.degrees(avg_heading):.2f}° (基于 {len(all_headings)} 个道路)")
+                print(f"节点 {node_id} 的统一斜率: {math.degrees(avg_heading):.2f}° (基于 {len(all_headings)} 个道路)")
+            elif len(all_headings) == 1:
+                # 只有一个道路使用该节点，直接使用该斜率
+                self.node_headings[node_id] = all_headings[0]
+                logger.debug(f"节点 {node_id} 的统一斜率: {math.degrees(all_headings[0]):.2f}° (仅1个道路)")
+                print(f"节点 {node_id} 的统一斜率: {math.degrees(all_headings[0]):.2f}° (仅1个道路)")
+            else:
+                logger.debug(f"节点 {node_id} 没有足够的斜率数据，跳过")
+                print(f"节点 {node_id} 没有足够的斜率数据，跳过")
         
         logger.info(f"节点统一斜率计算完成，共处理 {len(self.node_headings)} 个节点")
         
