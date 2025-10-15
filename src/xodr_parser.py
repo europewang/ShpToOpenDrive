@@ -340,7 +340,7 @@ class XODRParser:
                     x = x0 + s * math.cos(hdg)
                     y = y0 + s * math.sin(hdg)
             else:
-                # 对于复杂几何类型，使用线性近似
+                # 对于复杂几何类型, 使用线性近似
                 x = x0 + s * math.cos(hdg)
                 y = y0 + s * math.sin(hdg)
             
@@ -359,7 +359,7 @@ class XODRParser:
             resolution: 采样分辨率（米）
             
         Returns:
-            道路中心线字典，键为道路ID，值包含坐标和长度信息
+            道路中心线字典, 键为道路ID, 值包含坐标和长度信息
         """
         center_lines = {}
         

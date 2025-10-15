@@ -17,6 +17,820 @@ from scipy.optimize import minimize_scalar
 logger = logging.getLogger(__name__)
 
 
+class RoadLineConnectionManager:
+    """道路线连接管理器
+    
+    基于SNodeID和ENodeID识别道路线的前后继关系，
+    并计算连接处的一致斜率。专门处理道路线（road lines）而非道路面。
+    """
+    
+    def __init__(self):
+        """初始化道路线连接管理器"""
+        self.road_lines = {}  # 存储所有道路线数据 {road_id: road_line_data}
+        self.node_connections = {}  # 存储节点连接关系 {node_id: {'incoming': [], 'outgoing': []}}
+        self.predecessor_map = {}  # 前继映射 {road_id: [predecessor_road_ids]}
+        self.successor_map = {}  # 后继映射 {road_id: [successor_road_ids]}
+        self.node_headings = {}  # 存储节点统一斜率（NodeID -> 统一斜率）
+        
+    def add_road_line(self, road_id: str, road_data: Dict, start_heading: float = None, end_heading: float = None) -> None:
+        """添加道路线数据
+        
+        Args:
+            road_id: 道路线ID
+            road_data: 道路线数据，包含attributes中的SNodeID和ENodeID
+            start_heading: 起点航向角
+            end_heading: 终点航向角
+        """
+        logger.info(f"添加道路线 {road_id} 到连接管理器")
+        print(f"添加道路线 {road_id} 到连接管理器")
+        
+        # 从属性中提取SNodeID和ENodeID
+        attributes = road_data.get('attributes', {})
+        s_node_id = attributes.get('SNodeID')
+        e_node_id = attributes.get('ENodeID')
+
+        if s_node_id is not None:
+            s_node_id = str(s_node_id).strip()
+        if e_node_id is not None:
+            e_node_id = str(e_node_id).strip()
+        
+        self.road_lines[road_id] = {
+            'data': road_data,
+            's_node_id': s_node_id,
+            'e_node_id': e_node_id,
+            'start_heading': start_heading,
+            'end_heading': end_heading
+        }
+        
+        logger.debug(f"添加道路线 {road_id}: SNodeID={s_node_id}, ENodeID={e_node_id}")
+        
+    def build_connections(self) -> None:
+        """构建道路线连接关系"""
+        logger.info("开始构建道路线连接关系")
+        
+        # 清空之前的连接关系
+        self.predecessor_map.clear()
+        self.successor_map.clear()
+        self.node_connections.clear()
+        
+        # 构建节点连接映射
+        for road_id, road_info in self.road_lines.items():
+            s_node = road_info['s_node_id']
+            e_node = road_info['e_node_id']
+            
+            if s_node is None or e_node is None:
+                logger.warning(f"道路线 {road_id} 的SNodeID或ENodeID为None，跳过连接构建")
+                continue
+            
+            logger.debug(f"处理道路线 {road_id}, SNodeID: {s_node}, ENodeID: {e_node}")
+            
+            # 记录每个节点连接的道路线
+            if s_node not in self.node_connections:
+                self.node_connections[s_node] = {'incoming': [], 'outgoing': []}
+            if e_node not in self.node_connections:
+                self.node_connections[e_node] = {'incoming': [], 'outgoing': []}
+                
+            # s_node是该道路线的起点，所以该道路线从s_node出发
+            self.node_connections[s_node]['outgoing'].append(road_id)
+            # e_node是该道路线的终点，所以该道路线到达e_node
+            self.node_connections[e_node]['incoming'].append(road_id)
+            
+        # 构建前后继关系
+        for road_id, road_info in self.road_lines.items():
+            s_node = road_info['s_node_id']
+            e_node = road_info['e_node_id']
+            
+            # 查找前继：当前道路线的起点(s_node)的incoming道路线
+            predecessors = self.node_connections.get(s_node, {}).get('incoming', [])
+            logger.debug(f"道路线 {road_id} (SNode: {s_node}) 的潜在前继: {predecessors}")
+            if predecessors:
+                self.predecessor_map[road_id] = predecessors
+                logger.debug(f"道路线 {road_id} 的前继: {predecessors}")
+                
+            # 查找后继：当前道路线的终点(e_node)的outgoing道路线
+            successors = self.node_connections.get(e_node, {}).get('outgoing', [])
+            logger.debug(f"道路线 {road_id} (ENode: {e_node}) 的潜在后继: {successors}")
+            if successors:
+                self.successor_map[road_id] = successors
+                logger.debug(f"道路线 {road_id} 的后继: {successors}")
+                
+        logger.info(f"道路线连接关系构建完成，共处理 {len(self.road_lines)} 条道路线")
+        
+        # 计算节点统一斜率
+        self._calculate_node_headings()
+        
+    def get_predecessors(self, road_id: str) -> List[str]:
+        """获取道路线的前继
+        
+        Args:
+            road_id: 道路线ID
+            
+        Returns:
+            List[str]: 前继道路线ID列表
+        """
+        return self.predecessor_map.get(road_id, [])
+        
+    def get_successors(self, road_id: str) -> List[str]:
+        """获取道路线的后继
+        
+        Args:
+            road_id: 道路线ID
+            
+        Returns:
+            List[str]: 后继道路线ID列表
+        """
+        return self.successor_map.get(road_id, [])
+        
+    def _calculate_node_headings(self) -> None:
+        """计算每个节点的统一朝向（横截面方向）
+        
+        基于同一RoadID下不同Index线段的节点连线垂直斜率计算朝向：
+        - 头节点朝向：同一RoadID下任意两个不同Index线段的SNodeID连线的垂直斜率
+        - 尾节点朝向：同一RoadID下任意两个不同Index线段的ENodeID连线的垂直斜率
+        """
+        logger.info("开始计算道路线节点统一朝向（基于同一RoadID不同Index节点连线垂直斜率）")
+        print("开始计算道路线节点统一朝向（基于同一RoadID不同Index节点连线垂直斜率）")
+        
+        # 清空之前的节点朝向数据
+        self.node_headings.clear()
+        
+        # 按RoadID分组收集道路线信息
+        road_groups = {}
+        for road_id, road_info in self.road_lines.items():
+            road_id_num = road_info.get('road_id')
+            if road_id_num not in road_groups:
+                road_groups[road_id_num] = []
+            road_groups[road_id_num].append(road_info)
+        
+        # 为每个RoadID计算节点朝向
+        for road_id_num, road_list in road_groups.items():
+            if len(road_list) < 2:
+                continue  # 需要至少两条不同Index的线段
+            
+            # 收集所有起始节点和结束节点
+            start_nodes = []
+            end_nodes = []
+            for road_info in road_list:
+                start_node_id = road_info.get('start_node_id')
+                end_node_id = road_info.get('end_node_id')
+                start_coords = road_info.get('start_coords')
+                end_coords = road_info.get('end_coords')
+                
+                if start_node_id and start_coords:
+                    start_nodes.append({
+                        'node_id': start_node_id,
+                        'coords': start_coords
+                    })
+                if end_node_id and end_coords:
+                    end_nodes.append({
+                        'node_id': end_node_id,
+                        'coords': end_coords
+                    })
+            
+            # 计算起始节点朝向（基于不同Index线段的SNodeID连线垂直斜率）
+            if len(start_nodes) >= 2:
+                node1 = start_nodes[0]
+                node2 = start_nodes[1]
+                
+                # 计算两个节点之间的连线方向
+                dx = node2['coords'][0] - node1['coords'][0]
+                dy = node2['coords'][1] - node1['coords'][1]
+                
+                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
+                    # 连线方向角
+                    line_heading = math.atan2(dy, dx)
+                    # 垂直方向（加90°）
+                    perpendicular_heading = line_heading + math.pi / 2
+                    # 标准化角度到 [-π, π] 范围
+                    while perpendicular_heading > math.pi:
+                        perpendicular_heading -= 2 * math.pi
+                    while perpendicular_heading < -math.pi:
+                        perpendicular_heading += 2 * math.pi
+                    
+                    # 为所有起始节点设置相同的朝向
+                    for node in start_nodes:
+                        self.node_headings[node['node_id']] = perpendicular_heading
+                        logger.debug(f"RoadID {road_id_num} 起始节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+            
+            # 计算结束节点朝向（基于不同Index线段的ENodeID连线垂直斜率）
+            if len(end_nodes) >= 2:
+                node1 = end_nodes[0]
+                node2 = end_nodes[1]
+                
+                # 计算两个节点之间的连线方向
+                dx = node2['coords'][0] - node1['coords'][0]
+                dy = node2['coords'][1] - node1['coords'][1]
+                
+                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
+                    # 连线方向角
+                    line_heading = math.atan2(dy, dx)
+                    # 垂直方向（加90°）
+                    perpendicular_heading = line_heading + math.pi / 2
+                    # 标准化角度到 [-π, π] 范围
+                    while perpendicular_heading > math.pi:
+                        perpendicular_heading -= 2 * math.pi
+                    while perpendicular_heading < -math.pi:
+                        perpendicular_heading += 2 * math.pi
+                    
+                    # 为所有结束节点设置相同的朝向
+                    for node in end_nodes:
+                        self.node_headings[node['node_id']] = perpendicular_heading
+                        logger.debug(f"RoadID {road_id_num} 结束节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+                
+        logger.info(f"计算完成，共 {len(self.node_headings)} 个节点有统一朝向")
+        print(f"道路线节点统一朝向计算完成，共 {len(self.node_headings)} 个节点有统一朝向")
+        
+    def _calculate_average_heading(self, headings: List[float]) -> float:
+        """改进的平均航向角计算方法（考虑角度的周期性）
+        
+        Args:
+            headings: 航向角列表（弧度）
+            
+        Returns:
+            float: 平均航向角（弧度）
+        """
+        if not headings:
+            return 0.0
+        
+        if len(headings) == 1:
+            # 归一化单个角度
+            angle = headings[0]
+            while angle > math.pi:
+                angle -= 2 * math.pi
+            while angle < -math.pi:
+                angle += 2 * math.pi
+            return angle
+        
+        # 使用复数表示法计算平均向量
+        x_sum = sum(math.cos(h) for h in headings)
+        y_sum = sum(math.sin(h) for h in headings)
+        
+        # 检查向量是否几乎抵消（表示角度分布在±π附近）
+        magnitude = math.sqrt(x_sum**2 + y_sum**2)
+        
+        if magnitude < 1e-6:  # 向量几乎抵消，需要特殊处理
+            # 寻找最佳参考角度来减少方差
+            best_avg = None
+            min_variance = float('inf')
+            
+            for ref_angle in headings:
+                # 将所有角度相对于参考角度进行调整
+                adjusted_angles = []
+                for h in headings:
+                    diff = h - ref_angle
+                    # 选择最小的角度差
+                    if diff > math.pi:
+                        diff -= 2 * math.pi
+                    elif diff < -math.pi:
+                        diff += 2 * math.pi
+                    adjusted_angles.append(ref_angle + diff)
+                
+                # 计算简单平均值
+                avg = sum(adjusted_angles) / len(adjusted_angles)
+                
+                # 计算方差
+                variance = 0.0
+                for h in headings:
+                    angle_diff = h - avg
+                    while angle_diff > math.pi:
+                        angle_diff -= 2 * math.pi
+                    while angle_diff < -math.pi:
+                        angle_diff += 2 * math.pi
+                    variance += angle_diff**2
+                variance /= len(headings)
+                
+                if variance < min_variance:
+                    min_variance = variance
+                    best_avg = avg
+            
+            # 归一化结果
+            if best_avg is not None:
+                while best_avg > math.pi:
+                    best_avg -= 2 * math.pi
+                while best_avg < -math.pi:
+                    best_avg += 2 * math.pi
+                return best_avg
+            else:
+                return 0.0
+        else:
+            # 使用复数方法的结果
+            avg_heading = math.atan2(y_sum, x_sum)
+            return avg_heading
+        
+    def get_connection_info(self) -> Dict:
+        """获取连接信息统计
+        
+        Returns:
+            Dict: 连接信息统计
+        """
+        return {
+            'total_road_lines': len(self.road_lines),
+            'lines_with_predecessors': len(self.predecessor_map),
+            'lines_with_successors': len(self.successor_map),
+            'total_nodes': len(self.node_connections),
+            'nodes_with_unified_heading': len(self.node_headings)
+        }
+
+
+class RoadConnectionManager:
+    """道路连接管理器
+    
+    基于SNodeID和ENodeID识别道路面的前后继关系，
+    并计算连接处的一致斜率。
+    """
+    
+    def __init__(self):
+        """初始化连接管理器"""
+        self.road_surfaces = {}  # 存储所有道路面数据
+        self.node_connections = {}  # 存储节点连接关系
+        self.predecessor_map = {}  # 前继映射
+        self.successor_map = {}  # 后继映射
+        self.connection_headings = {} # 存储连接处的平均航向角
+        self.node_headings = {}  # 存储节点统一斜率（NodeID -> 统一斜率）
+        
+    def add_road_surface(self, surface_data: Dict, start_heading: float = None, end_heading: float = None) -> None:
+        """添加道路面数据
+        
+        Args:
+            surface_data: 道路面数据，包含attributes中的SNodeID和ENodeID
+        """
+        surface_id = surface_data.get('surface_id')
+        logger.info(f"Calling add_road_surface for surface_id: {surface_id}")
+        if not surface_id:
+            logger.warning("道路面缺少surface_id，跳过")
+            return
+            
+        # 从属性中提取SNodeID和ENodeID
+        attributes = surface_data.get('attributes', {})
+        s_node_id = attributes.get('SNodeID')
+        e_node_id = attributes.get('ENodeID')
+
+        if s_node_id is not None:
+            s_node_id = str(s_node_id).strip()
+        if e_node_id is not None:
+            e_node_id = str(e_node_id).strip()
+        
+        self.road_surfaces[surface_id] = {
+            'data': surface_data,
+            's_node_id': s_node_id,
+            'e_node_id': e_node_id,
+            'start_heading': start_heading,
+            'end_heading': end_heading
+        }
+        
+        logger.debug(f"添加道路面 {surface_id}: SNodeID={s_node_id}, ENodeID={e_node_id}")
+        
+    def build_connections(self) -> None:
+        """构建道路面连接关系"""
+        logger.info("开始构建道路面连接关系")
+        
+        # 清空之前的连接关系
+        self.predecessor_map.clear()
+        self.successor_map.clear()
+        self.node_connections.clear()
+        
+        # 构建节点连接映射
+        for surface_id, surface_info in self.road_surfaces.items():
+            s_node = surface_info['s_node_id']
+            e_node = surface_info['e_node_id']
+            
+            if s_node is None or e_node is None:
+                logger.warning(f"道路面 {surface_id} 的SNodeID或ENodeID为None，跳过连接构建")
+                continue
+            
+            logger.debug(f"RoadConnectionManager: Processing surface {surface_id}, SNodeID: {s_node}, ENodeID: {e_node}")
+            logger.debug(f"  Node connections before processing: SNode {s_node}: {self.node_connections.get(s_node)}, ENode {e_node}: {self.node_connections.get(e_node)}")
+            
+            # 记录每个节点连接的道路面
+            if s_node not in self.node_connections:
+                self.node_connections[s_node] = {'incoming': [], 'outgoing': []}
+            if e_node not in self.node_connections:
+                self.node_connections[e_node] = {'incoming': [], 'outgoing': []}
+                
+            # s_node是该道路面的起点，所以该道路面从s_node出发
+            self.node_connections[s_node]['outgoing'].append(surface_id)
+            # e_node是该道路面的终点，所以该道路面到达e_node
+            self.node_connections[e_node]['incoming'].append(surface_id)
+        logger.debug(f"Node connections after first loop: {self.node_connections}")
+            
+        # 构建前后继关系
+        for surface_id, surface_info in self.road_surfaces.items():
+            s_node = surface_info['s_node_id']
+            e_node = surface_info['e_node_id']
+            
+            # 查找前继：当前道路面的起点(s_node)的incoming道路面
+            predecessors = self.node_connections.get(s_node, {}).get('incoming', [])
+            logger.debug(f"  道路面 {surface_id} (SNode: {s_node}) 的潜在前继: {predecessors}")
+            if predecessors:
+                self.predecessor_map[surface_id] = predecessors
+                logger.debug(f"道路面 {surface_id} 的前继: {predecessors}")
+                
+            # 查找后继：当前道路面的终点(e_node)的outgoing道路面
+            successors = self.node_connections.get(e_node, {}).get('outgoing', [])
+            logger.debug(f"  道路面 {surface_id} (ENode: {e_node}) 的潜在后继: {successors}")
+            if successors:
+                self.successor_map[surface_id] = successors
+                logger.debug(f"道路面 {surface_id} 的后继: {successors}")
+                
+        logger.info(f"连接关系构建完成，共处理 {len(self.road_surfaces)} 个道路面")
+        logger.info(f"前继关系: {len(self.predecessor_map)} 个，后继关系: {len(self.successor_map)} 个")
+
+        # 注意：不再计算连接处的平均航向角，改用基于节点朝向的统一斜率计算
+
+        # 计算并存储节点的统一斜率
+        self._calculate_node_headings()
+                
+    def get_predecessors(self, surface_id: str) -> List[str]:
+        """获取道路面的前继
+        
+        Args:
+            surface_id: 道路面ID
+            
+        Returns:
+            List[str]: 前继道路面ID列表
+        """
+        return self.predecessor_map.get(surface_id, [])
+        
+    def get_successors(self, surface_id: str) -> List[str]:
+        """获取道路面的后继
+        
+        Args:
+            surface_id: 道路面ID
+            
+        Returns:
+            List[str]: 后继道路面ID列表
+        """
+        return self.successor_map.get(surface_id, [])
+        
+    def _calculate_node_headings(self) -> None:
+        """计算每个节点的统一斜率
+        
+        基于同一RoadID下不同Index道路面的节点连线垂直斜率计算朝向：
+        - 头节点朝向：同一RoadID下任意两个不同Index道路面的SNodeID连线的垂直斜率
+        - 尾节点朝向：同一RoadID下任意两个不同Index道路面的ENodeID连线的垂直斜率
+        """
+        logger.info("开始计算节点统一斜率（基于同一RoadID不同Index节点连线垂直斜率）")
+        
+        # 清空之前的节点斜率数据
+        self.node_headings.clear()
+        
+        # 按RoadID分组收集道路面信息
+        road_groups = {}
+        for surface_id, surface_info in self.road_surfaces.items():
+            # 从surface_id中提取RoadID (格式: "road_id_left_index_right_index")
+            try:
+                parts = surface_id.split('_')
+                if len(parts) >= 3:
+                    road_id_num = int(parts[0])
+                else:
+                    continue  # 跳过格式不正确的surface_id
+            except (ValueError, IndexError):
+                continue  # 跳过无法解析的surface_id
+            
+            if road_id_num not in road_groups:
+                road_groups[road_id_num] = []
+            
+            # 获取节点坐标
+            surface_data = surface_info.get('data', {})
+            s_node_id = surface_info.get('s_node_id')
+            e_node_id = surface_info.get('e_node_id')
+            
+            # 从几何数据中获取起始和结束坐标
+            geometry = surface_data.get('geometry')
+            if geometry and hasattr(geometry, 'coords'):
+                coords = list(geometry.coords)
+                if len(coords) >= 2:
+                    start_coords = coords[0]
+                    end_coords = coords[-1]
+                    
+                    road_groups[road_id_num].append({
+                        'surface_id': surface_id,
+                        's_node_id': s_node_id,
+                        'e_node_id': e_node_id,
+                        'start_coords': start_coords,
+                        'end_coords': end_coords
+                    })
+        
+        # 为每个RoadID计算节点朝向
+        for road_id_num, surface_list in road_groups.items():
+            if len(surface_list) < 2:
+                continue  # 需要至少两个不同Index的道路面
+            
+            # 收集所有起始节点和结束节点
+            start_nodes = []
+            end_nodes = []
+            for surface_info in surface_list:
+                s_node_id = surface_info.get('s_node_id')
+                e_node_id = surface_info.get('e_node_id')
+                start_coords = surface_info.get('start_coords')
+                end_coords = surface_info.get('end_coords')
+                
+                if s_node_id and start_coords:
+                    start_nodes.append({
+                        'node_id': s_node_id,
+                        'coords': start_coords
+                    })
+                if e_node_id and end_coords:
+                    end_nodes.append({
+                        'node_id': e_node_id,
+                        'coords': end_coords
+                    })
+            
+            # 计算起始节点朝向（基于不同Index道路面的SNodeID连线垂直斜率）
+            if len(start_nodes) >= 2:
+                node1 = start_nodes[0]
+                node2 = start_nodes[1]
+                
+                # 计算两个节点之间的连线方向
+                dx = node2['coords'][0] - node1['coords'][0]
+                dy = node2['coords'][1] - node1['coords'][1]
+                
+                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
+                    # 连线方向角
+                    line_heading = math.atan2(dy, dx)
+                    # 垂直方向（加90°）
+                    perpendicular_heading = line_heading + math.pi / 2
+                    # 标准化角度到 [-π, π] 范围
+                    while perpendicular_heading > math.pi:
+                        perpendicular_heading -= 2 * math.pi
+                    while perpendicular_heading < -math.pi:
+                        perpendicular_heading += 2 * math.pi
+                    
+                    # 为所有起始节点设置相同的朝向
+                    for node in start_nodes:
+                        self.node_headings[node['node_id']] = perpendicular_heading
+                        logger.debug(f"RoadID {road_id_num} 起始节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+                        print(f"RoadID {road_id_num} 起始节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+            
+            # 计算结束节点朝向（基于不同Index道路面的ENodeID连线垂直斜率）
+            if len(end_nodes) >= 2:
+                node1 = end_nodes[0]
+                node2 = end_nodes[1]
+                
+                # 计算两个节点之间的连线方向
+                dx = node2['coords'][0] - node1['coords'][0]
+                dy = node2['coords'][1] - node1['coords'][1]
+                
+                if abs(dx) > 1e-10 or abs(dy) > 1e-10:  # 避免除零
+                    # 连线方向角
+                    line_heading = math.atan2(dy, dx)
+                    # 垂直方向（加90°）
+                    perpendicular_heading = line_heading + math.pi / 2
+                    # 标准化角度到 [-π, π] 范围
+                    while perpendicular_heading > math.pi:
+                        perpendicular_heading -= 2 * math.pi
+                    while perpendicular_heading < -math.pi:
+                        perpendicular_heading += 2 * math.pi
+                    
+                    # 为所有结束节点设置相同的朝向
+                    for node in end_nodes:
+                        self.node_headings[node['node_id']] = perpendicular_heading
+                        logger.debug(f"RoadID {road_id_num} 结束节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+                        print(f"RoadID {road_id_num} 结束节点 {node['node_id']}: 朝向={math.degrees(perpendicular_heading):.2f}°")
+        
+        logger.info(f"节点统一斜率计算完成，共处理 {len(self.node_headings)} 个节点")
+        
+    def _calculate_average_heading(self, headings: List[float]) -> float:
+        """改进的平均航向角计算方法（考虑角度的周期性）
+        
+        Args:
+            headings: 航向角列表（弧度）
+            
+        Returns:
+            float: 平均航向角（弧度）
+        """
+        if not headings:
+            return 0.0
+        
+        if len(headings) == 1:
+            # 归一化单个角度
+            angle = headings[0]
+            while angle > math.pi:
+                angle -= 2 * math.pi
+            while angle < -math.pi:
+                angle += 2 * math.pi
+            return angle
+        
+        # 使用复数表示法计算平均向量
+        x_sum = sum(math.cos(h) for h in headings)
+        y_sum = sum(math.sin(h) for h in headings)
+        
+        # 检查向量是否几乎抵消（表示角度分布在±π附近）
+        magnitude = math.sqrt(x_sum**2 + y_sum**2)
+        
+        if magnitude < 1e-6:  # 向量几乎抵消，需要特殊处理
+            # 寻找最佳参考角度来减少方差
+            best_avg = None
+            min_variance = float('inf')
+            
+            for ref_angle in headings:
+                # 将所有角度相对于参考角度进行调整
+                adjusted_angles = []
+                for h in headings:
+                    diff = h - ref_angle
+                    # 选择最小的角度差
+                    if diff > math.pi:
+                        diff -= 2 * math.pi
+                    elif diff < -math.pi:
+                        diff += 2 * math.pi
+                    adjusted_angles.append(ref_angle + diff)
+                
+                # 计算简单平均值
+                avg = sum(adjusted_angles) / len(adjusted_angles)
+                
+                # 计算方差
+                variance = 0.0
+                for h in headings:
+                    angle_diff = h - avg
+                    while angle_diff > math.pi:
+                        angle_diff -= 2 * math.pi
+                    while angle_diff < -math.pi:
+                        angle_diff += 2 * math.pi
+                    variance += angle_diff**2
+                variance /= len(headings)
+                
+                if variance < min_variance:
+                    min_variance = variance
+                    best_avg = avg
+            
+            # 归一化结果
+            if best_avg is not None:
+                while best_avg > math.pi:
+                    best_avg -= 2 * math.pi
+                while best_avg < -math.pi:
+                    best_avg += 2 * math.pi
+                return best_avg
+            else:
+                return 0.0
+        else:
+            # 使用复数方法的结果
+            avg_heading = math.atan2(y_sum, x_sum)
+            return avg_heading
+        
+    def calculate_connection_heading(self, surface_id: str, at_start: bool = True) -> Optional[float]:
+        """计算连接处的航向角
+        
+        Args:
+            surface_id: 道路面ID
+            at_start: True表示计算起点航向角，False表示计算终点航向角
+            
+        Returns:
+            Optional[float]: 航向角（弧度），如果无法计算则返回None
+        """
+        if at_start:
+            # 起点航向角应该与前继道路面的终点航向角一致
+            predecessors = self.get_predecessors(surface_id)
+            if not predecessors:
+                return None
+                
+            # 如果有多个前继，选择第一个（可以根据需要改进选择策略）
+            pred_surface_id = predecessors[0]
+            pred_surface = self.road_surfaces.get(pred_surface_id)
+            if not pred_surface:
+                return None
+                
+            # 计算前继道路面的终点航向角
+            pred_center_line = pred_surface['data'].get('center_line', [])
+            if len(pred_center_line) >= 2:
+                # 使用最后两个点计算航向角
+                p1 = pred_center_line[-2]
+                p2 = pred_center_line[-1]
+                return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+                
+        else:
+            # 终点航向角应该与后继道路面的起点航向角一致
+            successors = self.get_successors(surface_id)
+            if not successors:
+                return None
+                
+            # 如果有多个后继，选择第一个
+            succ_surface_id = successors[0]
+            succ_surface = self.road_surfaces.get(succ_surface_id)
+            if not succ_surface:
+                return None
+                
+            # 计算后继道路面的起点航向角
+            succ_center_line = succ_surface['data'].get('center_line', [])
+            if len(succ_center_line) >= 2:
+                # 使用前两个点计算航向角
+                p1 = succ_center_line[0]
+                p2 = succ_center_line[1]
+                return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+                
+        return None
+        
+    def get_connection_info(self) -> Dict:
+        """获取连接信息摘要
+        
+        Returns:
+            Dict: 包含连接统计信息的字典
+        """
+        return {
+            'total_surfaces': len(self.road_surfaces),
+            'surfaces_with_predecessors': len(self.predecessor_map),
+            'surfaces_with_successors': len(self.successor_map),
+            'total_nodes': len(self.node_connections),
+            'predecessor_map': dict(self.predecessor_map),
+            'successor_map': dict(self.successor_map)
+        }
+
+    def get_surface_start_point(self, surface_id: str) -> Optional[Tuple[float, float]]:
+        """获取道路面的起点坐标"""
+        surface_info = self.road_surfaces.get(surface_id)
+        if surface_info and surface_info['data'].get('center_line'):
+            return surface_info['data']['center_line'][0]
+        return None
+
+    def get_surface_end_point(self, surface_id: str) -> Optional[Tuple[float, float]]:
+        """获取道路面的终点坐标"""
+        surface_info = self.road_surfaces.get(surface_id)
+        if surface_info and surface_info['data'].get('center_line'):
+            return surface_info['data']['center_line'][-1]
+        return None
+
+    def get_surface_start_heading(self, surface_id: str) -> Optional[float]:
+        """获取道路面的起点航向角"""
+        surface_info = self.road_surfaces.get(surface_id)
+        if surface_info and surface_info['data'].get('center_line'):
+            center_line = surface_info['data']['center_line']
+            if len(center_line) >= 2:
+                p1 = center_line[0]
+                p2 = center_line[1]
+                return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+        return None
+
+    def get_surface_end_heading(self, surface_id: str) -> Optional[float]:
+        """获取道路面的终点航向角"""
+        surface_info = self.road_surfaces.get(surface_id)
+        if surface_info and surface_info['data'].get('center_line'):
+            center_line = surface_info['data']['center_line']
+            if len(center_line) >= 2:
+                p1 = center_line[-2]
+                p2 = center_line[-1]
+                return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+        return None
+
+    def get_surface_start_width(self, surface_id: str) -> Optional[float]:
+        """获取道路面的起点宽度"""
+        surface_info = self.road_surfaces.get(surface_id)
+        if surface_info and surface_info['data'].get('width_profile'):
+            width_profile = surface_info['data']['width_profile']
+            if width_profile:
+                # 起点宽度通常是s=0处的宽度
+                return width_profile[0].get('width')
+        return None
+
+    def get_surface_end_width(self, surface_id: str) -> Optional[float]:
+        """获取道路面的终点宽度"""
+        surface_info = self.road_surfaces.get(surface_id)
+        if surface_info and surface_info['data'].get('width_profile'):
+            width_profile = surface_info['data']['width_profile']
+            if width_profile:
+                # 终点宽度通常是最后一个s值处的宽度
+                return width_profile[-1].get('width')
+        return None
+
+    def get_connection_heading(self, current_surface_id: str, connected_surface_id: str) -> Optional[float]:
+        """获取两个道路面连接处的航向角"""
+        # 如果connected_surface_id是current_surface_id的前继
+        if connected_surface_id in self.get_predecessors(current_surface_id):
+            return self.get_surface_end_heading(connected_surface_id)
+        # 如果connected_surface_id是current_surface_id的后继
+        elif connected_surface_id in self.get_successors(current_surface_id):
+            return self.get_surface_start_heading(connected_surface_id)
+        return None
+
+    def get_connection_width(self, current_surface_id: str, connected_surface_id: str) -> Optional[float]:
+        """获取两个道路面连接处的宽度"""
+        # 如果connected_surface_id是current_surface_id的前继
+        if connected_surface_id in self.get_predecessors(current_surface_id):
+            return self.get_surface_end_width(connected_surface_id)
+        # 如果connected_surface_id是current_surface_id的后继
+        elif connected_surface_id in self.get_successors(current_surface_id):
+            return self.get_surface_start_width(connected_surface_id)
+        return None
+
+    def get_connection_end_point(self, current_surface_id: str, connected_surface_id: str) -> Optional[Tuple[float, float]]:
+        """获取两个道路面连接处的终点坐标"""
+        # 如果connected_surface_id是current_surface_id的前继
+        if connected_surface_id in self.get_predecessors(current_surface_id):
+            return self.get_surface_end_point(connected_surface_id)
+        # 如果connected_surface_id是current_surface_id的后继
+        elif connected_surface_id in self.get_successors(current_surface_id):
+            return self.get_surface_start_point(connected_surface_id)
+        return None
+
+    def get_connection_start_point(self, current_surface_id: str, connected_surface_id: str) -> Optional[Tuple[float, float]]:
+        """获取两个道路面连接处的起点坐标"""
+        # 如果connected_surface_id是current_surface_id的前继
+        if connected_surface_id in self.get_predecessors(current_surface_id):
+            return self.get_surface_end_point(connected_surface_id)
+        # 如果connected_surface_id是current_surface_id的后继
+        elif connected_surface_id in self.get_successors(current_surface_id):
+            return self.get_surface_start_point(connected_surface_id)
+        return None
+
+
 class GeometryConverter:
     """几何转换器
     
@@ -36,8 +850,8 @@ class GeometryConverter:
             curve_fitting_mode: 曲线拟合模式 ("polyline", "polynomial", "spline", "parampoly3")
             polynomial_degree: 多项式拟合阶数 (2-5)
             curve_smoothness: 曲线平滑度 (0.0-1.0)
-            coordinate_precision: 坐标精度（小数位数）
-        """
+            coordinate_precision: int = 3):
+        初始化转换器"""
         self.tolerance = tolerance
         self.smooth_curves = smooth_curves
         self.preserve_detail = preserve_detail
@@ -45,6 +859,9 @@ class GeometryConverter:
         self.polynomial_degree = max(2, min(5, polynomial_degree))  # 限制在2-5之间
         self.curve_smoothness = max(0.0, min(1.0, curve_smoothness))  # 限制在0-1之间
         self.coordinate_precision = max(1, min(10, coordinate_precision))  # 限制在1-10之间
+        
+        # 初始化道路连接管理器
+        self.connection_manager = RoadConnectionManager()
         
         # 调整有效容差，减少过拟合
         if preserve_detail:
@@ -56,11 +873,15 @@ class GeometryConverter:
         self.max_segments_per_road = 50
         logger.info(f"几何转换器初始化，容差: {tolerance}m, 有效容差: {self.effective_tolerance}m, 平滑曲线: {smooth_curves}, 保留细节: {preserve_detail}")
     
-    def convert_road_geometry(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
+    def convert_road_geometry(self, coordinates: List[Tuple[float, float]], road_id: str = None, line_connection_manager: 'RoadLineConnectionManager' = None, surface_id: str = None, connection_manager = None) -> List[Dict]:
         """转换道路几何为OpenDrive格式
         
         Args:
             coordinates: 道路坐标点列表 [(x, y), ...]
+            road_id: 道路ID，用于道路线连接管理
+            line_connection_manager: 道路线连接管理器
+            surface_id: 道路面ID，用于道路面连接管理
+            connection_manager: 道路面连接管理器
             
         Returns:
             List[Dict]: OpenDrive几何段列表
@@ -83,7 +904,7 @@ class GeometryConverter:
         elif self.curve_fitting_mode == "polynomial":
             # 多项式曲线拟合模式
             logger.debug(f"使用多项式曲线拟合，阶数: {self.polynomial_degree}, 平滑度: {self.curve_smoothness}")
-            return self._fit_polynomial_curves(coordinates)
+            return self._fit_polynomial_curves(coordinates, surface_id=surface_id, connection_manager=connection_manager, road_id=road_id, line_connection_manager=line_connection_manager)
         
         elif self.curve_fitting_mode == "spline":
             # 样条曲线拟合模式
@@ -93,7 +914,7 @@ class GeometryConverter:
         elif self.curve_fitting_mode == "parampoly3":
             # ParamPoly3曲线拟合模式
             logger.debug(f"使用ParamPoly3曲线拟合，阶数: {self.polynomial_degree}, 平滑度: {self.curve_smoothness}")
-            return self._fit_polynomial_curves(coordinates)
+            return self._fit_polynomial_curves(coordinates, surface_id=surface_id, connection_manager=connection_manager, road_id=road_id, line_connection_manager=line_connection_manager)
         
         else:
             # 默认使用折线拟合
@@ -129,10 +950,9 @@ class GeometryConverter:
             # 使用改进的直线段拟合
             segments = self._fit_adaptive_line_segments(simplified_coords, current_s)
         
-        return segments
     
     def _calculate_arc_lengths(self, coordinates: List[Tuple[float, float]]) -> np.ndarray:
-        """计算弧长参数，提供更精确的参数化
+        """计算弧长参数, 提供更精确的参数化
         
         Args:
             coordinates: 坐标点列表
@@ -148,7 +968,7 @@ class GeometryConverter:
         return arc_lengths
     
     def _calculate_precise_heading(self, coordinates: List[Tuple[float, float]]) -> float:
-        """计算精确的起始航向角，使用多个点提高精度
+        """计算精确的起始航向角, 使用多个点提高精度
         
         Args:
             coordinates: 坐标点列表（至少2个点）
@@ -200,7 +1020,7 @@ class GeometryConverter:
         Returns:
             int: 最优多项式阶数
         """
-        max_degree = min(self.polynomial_degree, len(t_params) - 1, 3)
+        max_degree = min(self.polynomial_degree, len(t_params) - 1)
         min_degree = 1
         
         if len(t_params) <= 3:
@@ -296,17 +1116,21 @@ class GeometryConverter:
         except Exception:
             return float('inf')
     
-    def _optimize_boundary_conditions(self, local_u: np.ndarray, local_v: np.ndarray,
+    def _solve_boundary_constraints(self, local_u: np.ndarray, local_v: np.ndarray,
                                     au: float, bu: float, cu: float, du: float,
                                     av: float, bv: float, cv: float, dv: float,
-                                    degree: int) -> Tuple[float, float, float, float, float, float, float, float]:
-        """优化边界条件处理
+                                    degree: int, start_heading: float = None, end_heading: float = None,
+                                    total_length: float = None) -> Tuple[float, float, float, float, float, float, float, float]:
+        """严格求解边界约束条件，确保多项式满足给定的位置和切线约束
         
         Args:
             local_u, local_v: 局部坐标
             au, bu, cu, du: u方向多项式系数
             av, bv, cv, dv: v方向多项式系数
             degree: 多项式阶数
+            start_heading: 起始航向角（弧度），用于约束起点切线方向
+            end_heading: 终点航向角（弧度），用于约束终点切线方向
+            total_length: 总长度，用于计算导数约束
             
         Returns:
             Tuple: 优化后的多项式系数
@@ -324,19 +1148,142 @@ class GeometryConverter:
             bu = end_u
             bv = end_v
             cu = du = cv = dv = 0.0
-        else:
-            # 高次多项式：调整系数以确保终点正确
-            # 在t=1时：u(1) = au + bu + cu + du = end_u
-            #         v(1) = av + bv + cv + dv = end_v
+        elif degree >= 2 and start_heading is not None and end_heading is not None and total_length is not None:
+            # 高次多项式且有航向角约束：严格约束起点和终点的航向角
+            # 确保起点和终点的航向角都按照调整的斜率严格执行
             
+            # 在局部坐标系中计算起点和终点的切线方向
+            # 局部坐标系：u轴沿start_heading方向，v轴垂直于start_heading方向
+            
+            # 起点切线方向：在局部坐标系中，起点应该沿着start_heading方向
+            # 由于u轴就是start_heading方向，所以起点切线方向为(1, 0)
+            start_tangent_u = 1.0  # 起点切线方向沿u轴（单位向量）
+            start_tangent_v = 0.0  # 起点切线方向沿u轴，v分量为0
+            
+            # 终点切线方向：需要将end_heading转换到局部坐标系
+            # end_heading相对于start_heading的角度差
+            heading_diff = end_heading - start_heading
+            # 标准化角度差
+            while heading_diff > math.pi:
+                heading_diff -= 2 * math.pi
+            while heading_diff < -math.pi:
+                heading_diff += 2 * math.pi
+            
+            # 在局部坐标系中的终点切线方向（单位向量）
+            end_tangent_u = math.cos(heading_diff)  # 终点切线在u方向的分量
+            end_tangent_v = math.sin(heading_diff)  # 终点切线在v方向的分量
+            
+            if degree == 2:
+                # 二次多项式：u(t) = au + bu*t + cu*t^2, v(t) = av + bv*t + cv*t^2
+                # 严格约束边界条件：
+                # u(0) = 0, v(0) = 0 (已满足，au=av=0)
+                # u(1) = end_u, v(1) = end_v
+                # u'(0) = bu = start_tangent_u
+                # v'(0) = bv = start_tangent_v
+                # u'(1) = bu + 2*cu = end_tangent_u
+                # v'(1) = bv + 2*cv = end_tangent_v
+                
+                # 严格设置起点切线约束（需要乘以曲线长度来转换为导数值）
+                # 多项式导数：u'(t) = bu + 2*cu*t + 3*du*t^2
+                # 在t=0处，u'(0) = bu，所以bu应该等于起点处的导数值
+                # 导数值 = 单位向量 * 曲线长度
+                bu = start_tangent_u * total_length
+                bv = start_tangent_v * total_length
+                
+                # 对于二次多项式，严格满足位置约束，尽可能满足切线约束
+                # u(1) = bu + cu = end_u => cu = end_u - bu (严格满足终点位置)
+                # u'(1) = bu + 2*cu = end_tangent_u (尽可能满足终点切线)
+                # 
+                # 由于二次多项式只有3个自由度，无法同时严格满足4个约束
+                # 优先级：起点位置(已满足) > 起点切线(已满足) > 终点位置 > 终点切线
+                
+                # 严格满足终点位置约束
+                cu = end_u - bu
+                cv = end_v - bv
+                
+                # 检查终点切线约束的满足程度
+                actual_end_tangent_u = bu + 2 * cu
+                actual_end_tangent_v = bv + 2 * cv
+                expected_end_tangent_u = end_tangent_u * total_length
+                expected_end_tangent_v = end_tangent_v * total_length
+                
+                # 如果终点切线偏差较大，记录警告（但不修改，保持位置约束的严格性）
+                tangent_error_u = abs(actual_end_tangent_u - expected_end_tangent_u)
+                tangent_error_v = abs(actual_end_tangent_v - expected_end_tangent_v)
+                if tangent_error_u > total_length * 0.1 or tangent_error_v > total_length * 0.1:
+                    print(f"警告：二次多项式无法严格满足终点切线约束，切线误差: u={tangent_error_u:.3f}, v={tangent_error_v:.3f}")
+                
+                du = dv = 0.0
+                
+            elif degree >= 3:
+                # 三次及以上多项式：严格满足起点和终点的所有边界条件
+                # u(t) = au + bu*t + cu*t^2 + du*t^3 + ...
+                # v(t) = av + bv*t + cv*t^2 + dv*t^3 + ...
+                # 
+                # 严格约束边界条件：
+                # u(0) = 0, v(0) = 0 (已满足)
+                # u(1) = end_u, v(1) = end_v
+                # u'(0) = bu = start_tangent_u
+                # u'(1) = bu + 2*cu + 3*du = end_tangent_u
+                # v'(0) = bv = start_tangent_v
+                # v'(1) = bv + 2*cv + 3*dv = end_tangent_v
+                
+                # 严格设置起点切线约束（需要乘以曲线长度来转换为导数值）
+                # 多项式导数：u'(t) = bu + 2*cu*t + 3*du*t^2 + ...
+                # 在t=0处，u'(0) = bu，所以bu应该等于起点处的导数值
+                # 导数值 = 单位向量 * 曲线长度
+                bu = start_tangent_u * total_length
+                bv = start_tangent_v * total_length
+                
+                # 求解cu, du（对于三次及以上多项式，我们只使用前四个系数）
+                # u(1) = bu + cu + du = end_u
+                # u'(1) = bu + 2*cu + 3*du = end_tangent_u
+                # 解这个2x2线性方程组
+                A_u = np.array([[1, 1], [2, 3]])
+                b_u = np.array([end_u - bu, end_tangent_u * total_length - bu])
+                try:
+                    cu, du = np.linalg.solve(A_u, b_u)
+                except np.linalg.LinAlgError:
+                    # 如果矩阵奇异，回退到简单方法
+                    cu = end_u - bu
+                    du = 0.0
+                
+                # 求解cv, dv
+                A_v = np.array([[1, 1], [2, 3]])
+                b_v = np.array([end_v - bv, end_tangent_v * total_length - bv])
+                try:
+                    cv, dv = np.linalg.solve(A_v, b_v)
+                except np.linalg.LinAlgError:
+                    cv = end_v - bv
+                    dv = 0.0
+            else:
+                # 这个分支实际上不会被执行，因为degree >= 2
+                current_sum_u = bu + cu + du
+                current_sum_v = bv + cv + dv
+                
+                if abs(current_sum_u) < 1e-10:
+                    bu = end_u
+                else:
+                    scale_u = end_u / current_sum_u
+                    bu *= scale_u
+                    cu *= scale_u
+                    du *= scale_u
+                
+                if abs(current_sum_v) < 1e-10:
+                    bv = end_v
+                else:
+                    scale_v = end_v / current_sum_v
+                    bv *= scale_v
+                    cv *= scale_v
+                    dv *= scale_v
+        else:
+            # 没有航向角约束的情况，使用原来的方法
             current_sum_u = bu + cu + du
             current_sum_v = bv + cv + dv
             
-            # 如果当前和为零，直接设置线性项
             if abs(current_sum_u) < 1e-10:
                 bu = end_u
             else:
-                # 按比例调整所有非常数项
                 scale_u = end_u / current_sum_u
                 bu *= scale_u
                 cu *= scale_u
@@ -352,11 +1299,77 @@ class GeometryConverter:
         
         return au, bu, cu, du, av, bv, cv, dv
     
-    def _fit_segmented_polynomial_curves(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
-        """分段多项式拟合，用于处理复杂曲线
+    def _evaluate_constraint_solution_quality(self, local_u: np.ndarray, local_v: np.ndarray,
+                                             au: float, bu: float, cu: float, du: float,
+                                             av: float, bv: float, cv: float, dv: float,
+                                             degree: int, start_heading: float = None, 
+                                             end_heading: float = None, total_length: float = None) -> float:
+        """评估约束解的质量
+        
+        Args:
+            local_u, local_v: 局部坐标
+            au, bu, cu, du: u方向多项式系数
+            av, bv, cv, dv: v方向多项式系数
+            degree: 多项式阶数
+            start_heading: 起始航向角（弧度）
+            end_heading: 终点航向角（弧度）
+            total_length: 总长度
+            
+        Returns:
+            float: 拟合误差（越小越好）
+        """
+        # 生成参数t的采样点
+        t_samples = np.linspace(0, 1, len(local_u))
+        
+        # 计算多项式在采样点的值
+        u_poly = au + bu * t_samples + cu * t_samples**2 + du * t_samples**3
+        v_poly = av + bv * t_samples + cv * t_samples**2 + dv * t_samples**3
+        
+        # 计算拟合误差
+        u_error = np.mean((u_poly - local_u)**2)
+        v_error = np.mean((v_poly - local_v)**2)
+        fitting_error = np.sqrt(u_error + v_error)
+        
+        # 如果有航向角约束，检查约束满足程度
+        constraint_penalty = 0.0
+        
+        if start_heading is not None and total_length is not None:
+            # 检查起点切线约束
+            expected_start_tangent_u = math.cos(start_heading) * total_length
+            expected_start_tangent_v = math.sin(start_heading) * total_length
+            start_tangent_error = abs(bu - expected_start_tangent_u) + abs(bv - expected_start_tangent_v)
+            constraint_penalty += start_tangent_error * 0.1
+        
+        if end_heading is not None and total_length is not None:
+            # 检查终点切线约束
+            expected_end_tangent_u = math.cos(end_heading) * total_length
+            expected_end_tangent_v = math.sin(end_heading) * total_length
+            actual_end_tangent_u = bu + 2*cu + 3*du
+            actual_end_tangent_v = bv + 2*cv + 3*dv
+            end_tangent_error = abs(actual_end_tangent_u - expected_end_tangent_u) + abs(actual_end_tangent_v - expected_end_tangent_v)
+            constraint_penalty += end_tangent_error * 0.1
+        
+        # 检查终点位置约束
+        end_u_actual = bu + cu + du
+        end_v_actual = bv + cv + dv
+        end_u_expected = local_u[-1]
+        end_v_expected = local_v[-1]
+        position_error = abs(end_u_actual - end_u_expected) + abs(end_v_actual - end_v_expected)
+        constraint_penalty += position_error * 1.0
+        
+        return fitting_error + constraint_penalty
+    
+    def _fit_segmented_polynomial_curves(self, coordinates: List[Tuple[float, float]], 
+                                        global_start_heading: float = None, 
+                                        global_end_heading: float = None,
+                                        surface_id: str = None,
+                                        road_id: str = None) -> List[Dict]:
+        """分段多项式拟合，用于处理复杂曲线，确保段间严格连续性
         
         Args:
             coordinates: 坐标点列表
+            global_start_heading: 全局起点航向角（弧度），仅应用于第一段
+            global_end_heading: 全局终点航向角（弧度），仅应用于最后一段
             
         Returns:
             List[Dict]: ParamPoly3几何段列表
@@ -373,6 +1386,10 @@ class GeometryConverter:
         # 根据曲率变化和长度限制确定分段点
         segment_points = self._determine_segment_points(coordinates, curvature_changes)
         
+        # 存储段间连接信息，确保严格连续性
+        prev_end_position = None
+        prev_end_heading = None
+        
         # 对每个段进行拟合
         for i in range(len(segment_points) - 1):
             start_idx = segment_points[i]
@@ -380,25 +1397,437 @@ class GeometryConverter:
             
             segment_coords = coordinates[start_idx:end_idx]
             
+            # 确定当前段的边界约束
+            is_first_segment = (i == 0)
+            is_last_segment = (i == len(segment_points) - 2)
+            
+            # 计算段的边界约束
+            segment_start_heading = None
+            segment_end_heading = None
+            
+            # 起点约束
+            if is_first_segment:
+                # 第一段：使用全局起点航向角（如果提供）
+                segment_start_heading = global_start_heading
+            else:
+                # 中间段：必须使用前一段的终点航向角，确保C1连续性
+                segment_start_heading = prev_end_heading
+                # 同时确保起点位置连续性（C0连续性）
+                if prev_end_position is not None:
+                    # 调整当前段的起点坐标，确保与前一段终点完全一致
+                    segment_coords = list(segment_coords)
+                    segment_coords[0] = prev_end_position
+            
+            # 终点约束
+            if is_last_segment:
+                # 最后一段：使用全局终点航向角（如果提供）
+                segment_end_heading = global_end_heading
+            else:
+                # 中间段：预计算下一段的起点航向角作为当前段的终点约束
+                next_start_idx = segment_points[i + 1]
+                next_end_idx = min(segment_points[i + 2] + 1, len(coordinates)) if i + 2 < len(segment_points) else len(coordinates)
+                next_coords = coordinates[next_start_idx:next_end_idx]
+                if len(next_coords) >= 2:
+                    segment_end_heading = self._calculate_precise_heading(next_coords[:min(3, len(next_coords))])
+            
             if len(segment_coords) >= 3:
-                # 递归调用单段拟合
-                segment_geometries = self._fit_polynomial_curves(segment_coords)
+                # 使用完整的多项式拟合逻辑，包括统一斜率调整
+                segment_surface_id = f"{surface_id}_seg{i}" if surface_id else None
+                segment_geometries = self._fit_polynomial_curves(
+                    segment_coords, segment_surface_id, None, road_id, None, 
+                    segment_start_heading, segment_end_heading
+                )
                 
-                # 调整s坐标
+                # 调整s坐标并记录段信息
                 for geom in segment_geometries:
                     geom['s'] = current_s
                     current_s += geom['length']
                     segments.append(geom)
+                    
+                    # 记录当前段的终点信息，用于下一段的连续性约束
+                    if geom['type'] == 'parampoly3':
+                        prev_end_position, prev_end_heading = self._calculate_parampoly3_end_state(geom)
+                    else:
+                        # 对于直线段
+                        prev_end_position = (geom['x'], geom['y'])
+                        prev_end_heading = geom['hdg']
             else:
                 # 点太少，使用直线拟合
+                print("有问题！！！！！！！！！！！！！！！！！！！！！")
                 line_segments = self.fit_line_segments(segment_coords)
                 for geom in line_segments:
                     geom['s'] = current_s
                     current_s += geom['length']
                     segments.append(geom)
+                    
+                    # 记录直线段的终点信息
+                    prev_end_position = (geom['x'], geom['y'])
+                    prev_end_heading = geom['hdg']
         
         logger.debug(f"分段拟合完成，总段数: {len(segments)}, 原始点数: {len(coordinates)}")
         return segments
+
+    def _fit_single_polynomial_segment(self, coordinates: List[Tuple[float, float]], 
+                                     start_heading: float = None, 
+                                     end_heading: float = None) -> List[Dict]:
+        """拟合单个多项式段，支持特定的边界约束
+        
+        Args:
+            coordinates: 坐标点列表
+            start_heading: 起点航向角约束（弧度）
+            end_heading: 终点航向角约束（弧度）
+            
+        Returns:
+            List[Dict]: 包含单个ParamPoly3几何段的列表
+        """
+        if len(coordinates) < 3:
+            return self.fit_line_segments(coordinates)
+        
+        segments = []
+        current_s = 0.0
+        
+        # 将坐标转换为numpy数组
+        coords_array = np.array(coordinates)
+        x_coords = coords_array[:, 0]
+        y_coords = coords_array[:, 1]
+        
+        # 计算弧长参数
+        arc_lengths = self._calculate_arc_lengths(coordinates)
+        total_length = arc_lengths[-1]
+        
+        if total_length <= 0:
+            return self.fit_line_segments(coordinates)
+        
+        # 参数化
+        t_params = arc_lengths / total_length
+        
+        try:
+            # 如果没有提供起点航向角，则计算
+            if start_heading is None:
+                start_heading = self._calculate_precise_heading(coordinates[:min(3, len(coordinates))])
+            
+            # 添加统一斜率调整日志（与_fit_polynomial_curves方法保持一致）
+            if surface_id and start_heading is not None:
+                logger.info(f"高精度多项式拟合曲线段 道路面 {surface_id} 起点航向角: {math.degrees(start_heading):.2f}°")
+                print(f"高精度多项式拟合曲线段 道路面 {surface_id} 起点航向角: {math.degrees(start_heading):.2f}°")
+            
+            if surface_id and end_heading is not None:
+                logger.info(f"高精度多项式拟合曲线段 道路面 {surface_id} 终点航向角: {math.degrees(end_heading):.2f}°")
+                print(f"高精度多项式拟合曲线段 道路面 {surface_id} 终点航向角: {math.degrees(end_heading):.2f}°")
+            
+            # 建立局部坐标系
+            start_x, start_y = x_coords[0], y_coords[0]
+            cos_hdg = math.cos(start_heading)
+            sin_hdg = math.sin(start_heading)
+            
+            local_u = np.zeros(len(coordinates))
+            local_v = np.zeros(len(coordinates))
+            for i in range(len(coordinates)):
+                dx = x_coords[i] - start_x
+                dy = y_coords[i] - start_y
+                local_u[i] = dx * cos_hdg + dy * sin_hdg
+                local_v[i] = -dx * sin_hdg + dy * cos_hdg
+            
+            # 选择最优多项式阶数
+            optimal_degree = self._select_optimal_polynomial_degree(t_params, local_u, local_v)
+            
+            # 计算拟合权重
+            weights = self._calculate_fitting_weights(len(coordinates))
+            
+            # 多项式拟合
+            poly_u = np.polyfit(t_params, local_u, optimal_degree, w=weights)
+            poly_v = np.polyfit(t_params, local_v, optimal_degree, w=weights)
+            
+            # 计算拟合误差
+            fitted_u = np.polyval(poly_u, t_params)
+            fitted_v = np.polyval(poly_v, t_params)
+            fitting_error = np.sqrt(np.mean((local_u - fitted_u)**2 + (local_v - fitted_v)**2))
+            
+            # 转换为OpenDRIVE格式（注意系数顺序）
+            poly_u_reversed = poly_u[::-1]
+            poly_v_reversed = poly_v[::-1]
+            
+            # 填充到4个系数
+            poly_u_padded = np.pad(poly_u_reversed, (0, max(0, 4 - len(poly_u_reversed))), 'constant')
+            poly_v_padded = np.pad(poly_v_reversed, (0, max(0, 4 - len(poly_v_reversed))), 'constant')
+            
+            au = float(poly_u_padded[0]) if len(poly_u_padded) > 0 else 0.0
+            bu = float(poly_u_padded[1]) if len(poly_u_padded) > 1 else 0.0
+            cu = float(poly_u_padded[2]) if len(poly_u_padded) > 2 else 0.0
+            du = float(poly_u_padded[3]) if len(poly_u_padded) > 3 else 0.0
+            
+            av = float(poly_v_padded[0]) if len(poly_v_padded) > 0 else 0.0
+            bv = float(poly_v_padded[1]) if len(poly_v_padded) > 1 else 0.0
+            cv = float(poly_v_padded[2]) if len(poly_v_padded) > 2 else 0.0
+            dv = float(poly_v_padded[3]) if len(poly_v_padded) > 3 else 0.0
+            
+            # 严格求解边界约束条件
+            au, bu, cu, du, av, bv, cv, dv = self._solve_boundary_constraints(
+                local_u, local_v, au, bu, cu, du, av, bv, cv, dv, optimal_degree,
+                start_heading, end_heading, total_length
+            )
+            
+            # 创建ParamPoly3几何段
+            segment = {
+                'type': 'parampoly3',
+                's': current_s,
+                'x': float(x_coords[0]),
+                'y': float(y_coords[0]),
+                'hdg': start_heading,
+                'length': total_length,
+                'au': au,
+                'bu': bu,
+                'cu': cu,
+                'du': du,
+                'av': av,
+                'bv': bv,
+                'cv': cv,
+                'dv': dv,
+                'fitting_error': fitting_error,
+                'polynomial_degree': optimal_degree
+            }
+            
+            segments.append(segment)
+            
+            logger.debug(f"单段ParamPoly3拟合完成，点数: {len(coordinates)}, 长度: {total_length:.2f}m, 阶数: {optimal_degree}")
+            
+        except Exception as e:
+            logger.warning(f"单段ParamPoly3拟合失败: {e}，回退到直线拟合")
+            segments = self.fit_line_segments(coordinates)
+        
+        return segments
+
+    def _calculate_segment_end_heading(self, segment: Dict) -> float:
+        """计算ParamPoly3段在终点的航向角
+        
+        Args:
+            segment: ParamPoly3几何段字典
+            
+        Returns:
+            float: 终点航向角（弧度）
+        """
+        if segment['type'] != 'parampoly3':
+            return segment['hdg']
+        
+        # 在t=1处计算导数
+        bu, cu, du = segment['bu'], segment['cu'], segment['du']
+        bv, cv, dv = segment['bv'], segment['cv'], segment['dv']
+        
+        # u'(1) = bu + 2*cu + 3*du
+        # v'(1) = bv + 2*cv + 3*dv
+        du_dt = bu + 2*cu + 3*du
+        dv_dt = bv + 2*cv + 3*dv
+        
+        # 转换回全局坐标系的切线方向
+        start_heading = segment['hdg']
+        cos_hdg = math.cos(start_heading)
+        sin_hdg = math.sin(start_heading)
+        
+        # 局部坐标系的切线方向转换为全局坐标系
+        dx_global = du_dt * cos_hdg - dv_dt * sin_hdg
+        dy_global = du_dt * sin_hdg + dv_dt * cos_hdg
+        
+        # 计算航向角
+        end_heading = math.atan2(dy_global, dx_global)
+        
+        return end_heading
+
+    def _fit_single_polynomial_segment_with_constraints(self, coordinates: List[Tuple[float, float]], 
+                                                       start_heading: float = None, 
+                                                       end_heading: float = None,
+                                                       surface_id: str = None,
+                                                       road_id: str = None) -> List[Dict]:
+        """拟合单个多项式段，强制应用严格的边界约束
+        
+        Args:
+            coordinates: 坐标点列表
+            start_heading: 起点航向角约束（弧度），如果提供则强制满足
+            end_heading: 终点航向角约束（弧度），如果提供则强制满足
+            
+        Returns:
+            List[Dict]: 包含单个ParamPoly3几何段的列表
+        """
+        if len(coordinates) < 3:
+            return self.fit_line_segments(coordinates)
+        
+        segments = []
+        current_s = 0.0
+        
+        # 将坐标转换为numpy数组
+        coords_array = np.array(coordinates)
+        x_coords = coords_array[:, 0]
+        y_coords = coords_array[:, 1]
+        
+        # 计算弧长参数
+        arc_lengths = self._calculate_arc_lengths(coordinates)
+        total_length = arc_lengths[-1]
+        
+        if total_length <= 0:
+            return self.fit_line_segments(coordinates)
+        
+        # 参数化
+        t_params = arc_lengths / total_length
+        
+        try:
+            # 如果没有提供起点航向角，则计算
+            if start_heading is None:
+                start_heading = self._calculate_precise_heading(coordinates[:min(3, len(coordinates))])
+            
+            # 建立局部坐标系
+            start_x, start_y = x_coords[0], y_coords[0]
+            cos_hdg = math.cos(start_heading)
+            sin_hdg = math.sin(start_heading)
+            
+            local_u = np.zeros(len(coordinates))
+            local_v = np.zeros(len(coordinates))
+            for i in range(len(coordinates)):
+                dx = x_coords[i] - start_x
+                dy = y_coords[i] - start_y
+                local_u[i] = dx * cos_hdg + dy * sin_hdg
+                local_v[i] = -dx * sin_hdg + dy * cos_hdg
+            
+            # 如果有航向角约束，直接使用约束求解方法
+            if start_heading is not None and end_heading is not None:
+                # 直接使用边界约束求解，跳过np.polyfit
+                degree = 3  # 使用三次多项式确保能满足所有约束
+                au = av = 0.0  # 起点位置约束
+                bu = cu = du = bv = cv = dv = 0.0  # 初始系数
+                
+                # 直接调用约束求解
+                au, bu, cu, du, av, bv, cv, dv = self._solve_boundary_constraints(
+                    local_u, local_v, au, bu, cu, du, av, bv, cv, dv, degree,
+                    start_heading, end_heading, total_length
+                )
+                
+                # 评估约束解的质量
+                fitting_error = self._evaluate_constraint_solution_quality(
+                    local_u, local_v, au, bu, cu, du, av, bv, cv, dv, degree,
+                    start_heading, end_heading, total_length
+                )
+                
+                optimal_degree = degree
+            else:
+                # 没有完整约束，使用传统方法
+                # 选择最优多项式阶数
+                optimal_degree = self._select_optimal_polynomial_degree(t_params, local_u, local_v)
+                
+                # 计算拟合权重
+                weights = self._calculate_fitting_weights(len(coordinates))
+                
+                # 多项式拟合
+                poly_u = np.polyfit(t_params, local_u, optimal_degree, w=weights)
+                poly_v = np.polyfit(t_params, local_v, optimal_degree, w=weights)
+                
+                # 计算拟合误差
+                fitted_u = np.polyval(poly_u, t_params)
+                fitted_v = np.polyval(poly_v, t_params)
+                fitting_error = np.sqrt(np.mean((local_u - fitted_u)**2 + (local_v - fitted_v)**2))
+                
+                # 转换为OpenDRIVE格式（注意系数顺序）
+                poly_u_reversed = poly_u[::-1]
+                poly_v_reversed = poly_v[::-1]
+                
+                # 填充到4个系数
+                poly_u_padded = np.pad(poly_u_reversed, (0, max(0, 4 - len(poly_u_reversed))), 'constant')
+                poly_v_padded = np.pad(poly_v_reversed, (0, max(0, 4 - len(poly_v_reversed))), 'constant')
+                
+                au = float(poly_u_padded[0]) if len(poly_u_padded) > 0 else 0.0
+                bu = float(poly_u_padded[1]) if len(poly_u_padded) > 1 else 0.0
+                cu = float(poly_u_padded[2]) if len(poly_u_padded) > 2 else 0.0
+                du = float(poly_u_padded[3]) if len(poly_u_padded) > 3 else 0.0
+                
+                av = float(poly_v_padded[0]) if len(poly_v_padded) > 0 else 0.0
+                bv = float(poly_v_padded[1]) if len(poly_v_padded) > 1 else 0.0
+                cv = float(poly_v_padded[2]) if len(poly_v_padded) > 2 else 0.0
+                dv = float(poly_v_padded[3]) if len(poly_v_padded) > 3 else 0.0
+                
+                # 应用边界约束条件（如果有部分约束）
+                au, bu, cu, du, av, bv, cv, dv = self._solve_boundary_constraints(
+                    local_u, local_v, au, bu, cu, du, av, bv, cv, dv, optimal_degree,
+                    start_heading, end_heading, total_length
+                )
+            
+            # 创建ParamPoly3几何段
+            segment = {
+                'type': 'parampoly3',
+                's': current_s,
+                'x': float(x_coords[0]),
+                'y': float(y_coords[0]),
+                'hdg': start_heading,
+                'length': total_length,
+                'au': au,
+                'bu': bu,
+                'cu': cu,
+                'du': du,
+                'av': av,
+                'bv': bv,
+                'cv': cv,
+                'dv': dv,
+                'fitting_error': fitting_error,
+                'polynomial_degree': optimal_degree
+            }
+            
+            segments.append(segment)
+            
+            logger.debug(f"约束单段ParamPoly3拟合完成，点数: {len(coordinates)}, 长度: {total_length:.2f}m, 阶数: {optimal_degree}")
+            
+        except Exception as e:
+            logger.warning(f"约束单段ParamPoly3拟合失败: {e}，回退到直线拟合")
+            segments = self.fit_line_segments(coordinates)
+        
+        return segments
+
+    def _calculate_parampoly3_end_state(self, segment: Dict) -> Tuple[Tuple[float, float], float]:
+        """计算ParamPoly3段的终点位置和航向角
+        
+        Args:
+            segment: ParamPoly3几何段字典
+            
+        Returns:
+            Tuple: ((end_x, end_y), end_heading)
+        """
+        # 提取多项式系数
+        au, bu, cu, du = segment['au'], segment['bu'], segment['cu'], segment['du']
+        av, bv, cv, dv = segment['av'], segment['bv'], segment['cv'], segment['dv']
+        
+        # 在t=1处计算局部坐标
+        end_u = au + bu + cu + du
+        end_v = av + bv + cv + dv
+        
+        # 在t=1处计算局部切线方向
+        end_du_dt = bu + 2*cu + 3*du
+        end_dv_dt = bv + 2*cv + 3*dv
+        
+        # 转换回全局坐标系
+        start_x, start_y = segment['x'], segment['y']
+        start_hdg = segment['hdg']
+        cos_hdg = math.cos(start_hdg)
+        sin_hdg = math.sin(start_hdg)
+        
+        # 终点全局坐标
+        end_x = start_x + end_u * cos_hdg - end_v * sin_hdg
+        end_y = start_y + end_u * sin_hdg + end_v * cos_hdg
+        
+        # 终点航向角
+        # 局部切线方向转换为全局方向
+        global_dx = end_du_dt * cos_hdg - end_dv_dt * sin_hdg
+        global_dy = end_du_dt * sin_hdg + end_dv_dt * cos_hdg
+        
+        end_heading = math.atan2(global_dy, global_dx)
+        
+        return ((end_x, end_y), end_heading)
+
+    def _calculate_heading(self, p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
+        """计算两点之间的航向角 (弧度)
+        
+        Args:
+            p1: 第一个点 (x, y)
+            p2: 第二个点 (x, y)
+            
+        Returns:
+            float: 航向角 (弧度)
+        """
+        return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
     
     def _detect_curvature_changes(self, coordinates: List[Tuple[float, float]]) -> List[int]:
         """检测曲率变化点
@@ -1193,17 +2622,20 @@ class GeometryConverter:
         # 由于我们现在使用连续的几何定义，所有段都应该是连续的
         return True
     
-    def convert_lane_surface_geometry(self, lane_surfaces: List[Dict]) -> List[Dict]:
-        """转换车道面几何为OpenDrive格式
+    def convert_lane_surface_geometry(self, lane_surfaces: List[Dict], road_id: str = None, line_connection_manager: 'RoadLineConnectionManager' = None) -> List[Dict]:
+        """转换车道面几何为OpenDrive格式，支持基于前后继道路面的斜率一致性
         
         Args:
             lane_surfaces: 车道面数据列表，每个包含left_boundary和right_boundary
+            road_id: 道路ID，用于道路线连接管理
+            line_connection_manager: 道路线连接管理器，用于斜率一致性调整
             
         Returns:
             List[Dict]: 转换后的车道面几何数据
         """
         converted_surfaces = []
         
+        # 第三步：转换几何，应用斜率一致性
         for surface in lane_surfaces:
             try:
                 # 获取左右边界坐标
@@ -1213,8 +2645,18 @@ class GeometryConverter:
                 # 计算中心线坐标
                 center_coords, width_data = self._calculate_center_line(left_coords, right_coords)
                 
-                # 转换中心线几何
-                center_segments = self.convert_road_geometry(center_coords)
+                # 获取连接信息
+                surface_id = surface['surface_id']
+                predecessors = self.connection_manager.get_predecessors(surface_id)
+                successors = self.connection_manager.get_successors(surface_id)
+                
+                # 应用连接一致性调整
+                adjusted_center_coords = self._apply_connection_consistency(
+                    center_coords, surface_id, predecessors, successors, self.connection_manager
+                )
+                
+                # 转换中心线几何，支持道路线连接管理器的斜率调整
+                center_segments = self.convert_road_geometry(adjusted_center_coords, road_id=road_id, line_connection_manager=line_connection_manager, surface_id=surface_id, connection_manager=self.connection_manager)
                 
                 # 计算车道宽度变化
                 width_profile = self._calculate_width_profile(left_coords, right_coords, center_segments)
@@ -1224,19 +2666,309 @@ class GeometryConverter:
                     'center_segments': center_segments,
                     'width_profile': width_profile,
                     'left_boundary': surface['left_boundary'],
-                    'right_boundary': surface['right_boundary']
+                    'right_boundary': surface['right_boundary'],
+                    'predecessors': predecessors,
+                    'successors': successors
                 }
                 
-
                 converted_surfaces.append(surface_data)
                 
             except Exception as e:
                 logger.error(f"车道面 {surface.get('surface_id', 'unknown')} 几何转换失败: {e}")
                 continue
         
-        logger.info(f"成功转换 {len(converted_surfaces)} 个车道面的几何")
         return converted_surfaces
+
+    def add_surfaces_to_connection_manager(self, lane_surfaces: List[Dict]) -> None:
+        """
+        将车道面数据添加到连接管理器，但不立即构建连接。
+        此方法用于在所有车道面数据都可用后，再统一构建连接。
+        """
+        for surface in lane_surfaces:
+            try:
+                # 提取边界坐标
+                left_coords = surface['left_boundary']['coordinates']
+                right_coords = surface['right_boundary']['coordinates']
+
+                # 计算中心线坐标
+                center_coords, _ = self._calculate_center_line(left_coords, right_coords)
+
+                # 提取节点信息
+                s_node_id = surface['attributes'].get('SNodeID')
+                e_node_id = surface['attributes'].get('ENodeID')
+
+                surface_data = {
+                    'surface_id': surface['surface_id'],
+                    'attributes': {
+                        'SNodeID': s_node_id,
+                        'ENodeID': e_node_id
+                    },
+                    'center_line': center_coords
+                }
+
+                # 计算起点和终点航向角
+                start_heading = self._calculate_heading(center_coords[0], center_coords[1]) if len(center_coords) > 1 else None
+                end_heading = self._calculate_heading(center_coords[-2], center_coords[-1]) if len(center_coords) > 1 else None
+
+                # 添加到连接管理器
+                self.connection_manager.add_road_surface(surface_data, start_heading=start_heading, end_heading=end_heading)
+
+            except Exception as e:
+                logger.error(f"道路面 {surface.get('surface_id', 'unknown')} 数据预处理失败: {e}")
+                continue
+
+    def add_road_lines_to_connection_manager(self, roads_data: List[Dict], line_connection_manager: 'RoadLineConnectionManager') -> None:
+        """将道路线数据添加到道路线连接管理器
+        
+        Args:
+            roads_data: 传统格式的道路数据列表
+            line_connection_manager: 道路线连接管理器
+        """
+        for road_data in roads_data:
+            try:
+                road_id = str(road_data['id'])
+                coordinates = road_data['coordinates']
+                attributes = road_data.get('attributes', {})
+                
+                # 提取SNodeID和ENodeID
+                s_node_id = attributes.get('SNodeID') or attributes.get('s_node_id')
+                e_node_id = attributes.get('ENodeID') or attributes.get('e_node_id')
+                
+                # 如果没有节点ID，跳过这条道路
+                if not s_node_id or not e_node_id:
+                    logger.warning(f"道路线 {road_id} 缺少SNodeID或ENodeID，跳过连接管理")
+                    continue
+                
+                # 计算起点和终点航向角
+                start_heading = self._calculate_heading(coordinates[0], coordinates[1]) if len(coordinates) > 1 else None
+                end_heading = self._calculate_heading(coordinates[-2], coordinates[-1]) if len(coordinates) > 1 else None
+                
+                # 添加到道路线连接管理器
+                line_connection_manager.add_road_line(
+                    road_id=road_id,
+                    road_data=road_data,
+                    start_heading=start_heading,
+                    end_heading=end_heading
+                )
+                
+                logger.debug(f"道路线 {road_id} 已添加到连接管理器: SNodeID={s_node_id}, ENodeID={e_node_id}")
+                
+            except Exception as e:
+                logger.error(f"道路线 {road_data.get('id', 'unknown')} 数据预处理失败: {e}")
+                continue
+
     
+    def _apply_slope_consistency(self, center_coords: List[Tuple[float, float]], 
+                               surface_id: str, predecessors: List[str], 
+                               successors: List[str], 
+                               connection_manager: 'RoadConnectionManager') -> List[Tuple[float, float]]:
+        """应用斜率一致性调整，确保起终点斜率与节点统一斜率一致
+        
+        对于使用相同NodeID的道路，在该点处保持斜率一致性：
+        - 如果SNodeID与节点ID相同，调整第二个点位置
+        - 如果ENodeID与节点ID相同，调整倒数第二个点位置
+        
+        Args:
+            center_coords: 原始中心线坐标
+            surface_id: 当前道路面ID
+            predecessors: 前继道路面ID列表
+            successors: 后继道路面ID列表
+            connection_manager: 道路连接管理器
+            
+        Returns:
+            List[Tuple[float, float]]: 调整后的中心线坐标
+        """
+        if len(center_coords) < 2:
+            return center_coords
+        
+        adjusted_center_coords = list(center_coords)
+        surface_info = connection_manager.road_surfaces.get(surface_id)
+        
+        if not surface_info:
+            return adjusted_center_coords
+        
+        s_node_id = surface_info['s_node_id']
+        e_node_id = surface_info['e_node_id']
+        # 处理起点斜率一致性（SNodeID）
+        if s_node_id and s_node_id in connection_manager.node_headings:
+            target_heading = connection_manager.node_headings[s_node_id]
+            print(f"道路面 {surface_id} 起点SNodeID: {s_node_id}, target_heading: {math.degrees(target_heading):.2f}°")
+            # 获取当前道路的起点和第二个点
+            p1 = adjusted_center_coords[0]
+            p2 = adjusted_center_coords[1]
+            
+            # 计算当前航向角
+            current_heading = self._calculate_heading(p1, p2)
+            
+            # 计算航向角差值
+            heading_diff = target_heading - current_heading
+            
+            # 旋转第二个点以匹配目标航向角
+            # 假设p1是旋转中心
+            rotated_p2_x = p1[0] + (p2[0] - p1[0]) * math.cos(heading_diff) - (p2[1] - p1[1]) * math.sin(heading_diff)
+            rotated_p2_y = p1[1] + (p2[0] - p1[0]) * math.sin(heading_diff) + (p2[1] - p1[1]) * math.cos(heading_diff)
+            
+            adjusted_center_coords[1] = (rotated_p2_x, rotated_p2_y)
+            logger.debug(f"道路面 {surface_id} 起点斜率已调整为节点 {s_node_id} 的统一斜率: {math.degrees(target_heading):.2f}°")
+            print(f"道路面 {surface_id} 起点斜率已调整为节点 {s_node_id} 的统一斜率: {math.degrees(target_heading):.2f}°")
+        
+        # 处理终点斜率一致性（ENodeID）
+        if e_node_id and e_node_id in connection_manager.node_headings:
+            target_heading = connection_manager.node_headings[e_node_id]
+            print(f"道路面 {surface_id} 终点ENodeID: {e_node_id}, target_heading: {math.degrees(target_heading):.2f}°")
+            # 获取当前道路的倒数第二个点和终点
+            p1 = adjusted_center_coords[-2]
+            p2 = adjusted_center_coords[-1]
+            
+            # 计算当前航向角
+            current_heading = self._calculate_heading(p1, p2)
+            
+            # 计算航向角差值
+            heading_diff = target_heading - current_heading
+            
+            # 旋转倒数第二个点以匹配目标航向角
+            # 假设p2是旋转中心
+            rotated_p1_x = p2[0] + (p1[0] - p2[0]) * math.cos(heading_diff) - (p1[1] - p2[1]) * math.sin(heading_diff)
+            rotated_p1_y = p2[1] + (p1[0] - p2[0]) * math.sin(heading_diff) + (p1[1] - p2[1]) * math.cos(heading_diff)
+            
+            adjusted_center_coords[-2] = (rotated_p1_x, rotated_p1_y)
+            logger.debug(f"道路面 {surface_id} 终点斜率已调整为节点 {e_node_id} 的统一斜率: {math.degrees(target_heading):.2f}°")
+            print(f"道路面 {surface_id} 终点斜率已调整为节点 {e_node_id} 的统一斜率: {math.degrees(target_heading):.2f}°")
+        
+        return adjusted_center_coords
+
+    def _apply_connection_consistency(self, center_coords: List[Tuple[float, float]], 
+                                   surface_id: str, predecessors: List[str], 
+                                   successors: List[str], 
+                                   connection_manager: 'RoadConnectionManager') -> List[Tuple[float, float]]:
+        """应用连接一致性调整，确保起终点斜率、宽度和位置与前后继道路面一致
+        
+        Args:
+            center_coords: 原始中心线坐标
+            surface_id: 当前道路面ID
+            predecessors: 前继道路面ID列表
+            successors: 后继道路面ID列表
+            connection_manager: 道路连接管理器
+            
+        Returns:
+            List[Tuple[float, float]]: 调整后的中心线坐标
+        """
+        adjusted_center_coords = list(center_coords) # 创建副本以进行修改
+        logger.debug(f"进入 _apply_connection_consistency, surface_id: {surface_id}, predecessors: {predecessors}, successors: {successors}")
+
+        # 1. 确定目标起点和终点位置
+        target_start_point = adjusted_center_coords[0]
+        target_end_point = adjusted_center_coords[-1]
+
+        # 2. 航向角一致性调整
+        if predecessors and len(adjusted_center_coords) >= 2:
+            predecessor_id = predecessors[0] # 假设只有一个前继
+            connection_key = (predecessor_id, surface_id)
+            if connection_key in connection_manager.connection_headings:
+                target_heading = connection_manager.connection_headings[connection_key]
+                
+                # 获取当前道路的起点和第二个点
+                p1 = adjusted_center_coords[0]
+                p2 = adjusted_center_coords[1]
+                
+                # 计算当前航向角
+                current_heading = self._calculate_heading(p1, p2)
+                
+                # 计算航向角差值
+                heading_diff = target_heading - current_heading
+                
+                # 旋转第二个点以匹配目标航向角
+                # 假设p1是旋转中心
+                rotated_p2_x = p1[0] + (p2[0] - p1[0]) * math.cos(heading_diff) - (p2[1] - p1[1]) * math.sin(heading_diff)
+                rotated_p2_y = p1[1] + (p2[0] - p1[0]) * math.sin(heading_diff) + (p2[1] - p1[1]) * math.cos(heading_diff)
+                
+                adjusted_center_coords[1] = (rotated_p2_x, rotated_p2_y)
+                logger.debug(f"道路面 {surface_id} 起点航向角已调整为 {math.degrees(target_heading):.2f}°")
+
+        if successors and len(adjusted_center_coords) >= 2:
+            successor_id = successors[0] # 假设只有一个后继
+            connection_key = (surface_id, successor_id)
+            if connection_key in connection_manager.connection_headings:
+                target_heading = connection_manager.connection_headings[connection_key]
+                
+                # 获取当前道路的倒数第二个点和终点
+                p1 = adjusted_center_coords[-2]
+                p2 = adjusted_center_coords[-1]
+                
+                # 计算当前航向角
+                current_heading = self._calculate_heading(p1, p2)
+                
+                # 计算航向角差值
+                heading_diff = target_heading - current_heading
+                
+                # 旋转倒数第二个点以匹配目标航向角
+                # 假设p2是旋转中心
+                rotated_p1_x = p2[0] + (p1[0] - p2[0]) * math.cos(heading_diff) - (p1[1] - p2[1]) * math.sin(heading_diff)
+                rotated_p1_y = p2[1] + (p1[0] - p2[0]) * math.sin(heading_diff) + (p1[1] - p2[1]) * math.cos(heading_diff)
+                
+                adjusted_center_coords[-2] = (rotated_p1_x, rotated_p1_y)
+                logger.debug(f"道路面 {surface_id} 终点航向角已调整为 {math.degrees(target_heading):.2f}°")
+
+        # 3. 斜率一致性调整（基于NodeID的统一斜率）
+        adjusted_center_coords = self._apply_slope_consistency(
+            adjusted_center_coords, surface_id, predecessors, successors, connection_manager
+        )
+
+        # 4. 位置一致性调整 (保持原有逻辑)
+        if predecessors:
+            predecessor_id = predecessors[0] # 假设只有一个前继
+            pre_end_point = connection_manager.get_connection_end_point(surface_id, predecessor_id)
+            if pre_end_point:
+                target_start_point = pre_end_point
+                logger.debug(f"确定道路面 {surface_id} 目标起点位置为 {target_start_point} (与前继 {predecessor_id} 一致)")
+
+        if successors:
+            successor_id = successors[0] # 假设只有一个后继
+            suc_start_point = connection_manager.get_connection_start_point(surface_id, successor_id)
+            if suc_start_point:
+                target_end_point = suc_start_point
+                logger.debug(f"确定道路面 {surface_id} 目标终点位置为 {target_end_point} (与后继 {successor_id} 一致)")
+
+        # 4. 计算原始起点和终点
+        original_start_point = center_coords[0]
+        original_end_point = center_coords[-1]
+
+        # 5. 计算位移向量
+        start_offset_x = target_start_point[0] - original_start_point[0]
+        start_offset_y = target_start_point[1] - original_start_point[1]
+        end_offset_x = target_end_point[0] - original_end_point[0]
+        end_offset_y = target_end_point[1] - original_end_point[1]
+
+        # 6. 对 center_coords 进行线性插值调整
+        num_points = len(adjusted_center_coords)
+        if num_points > 1:
+            for i in range(num_points):
+                # 计算当前点在曲线上的相对位置 (0到1)
+                alpha = i / (num_points - 1)
+
+                # 线性插值计算当前点的位移
+                current_offset_x = start_offset_x * (1 - alpha) + end_offset_x * alpha
+                current_offset_y = start_offset_y * (1 - alpha) + end_offset_y * alpha
+
+                # 应用位移
+                adjusted_center_coords[i] = (
+                    adjusted_center_coords[i][0] + current_offset_x,
+                    adjusted_center_coords[i][1] + current_offset_y
+                )
+            logger.debug(f"道路面 {surface_id} 中心线已进行平滑的位置调整")
+        elif num_points == 1:
+            adjusted_center_coords[0] = (
+                adjusted_center_coords[0][0] + start_offset_x,
+                adjusted_center_coords[0][1] + start_offset_y
+            )
+            logger.debug(f"道路面 {surface_id} 单点中心线已进行位置调整")
+
+        return adjusted_center_coords
+        # 宽度一致性调整 (需要重新计算宽度剖面)
+
+        return adjusted_center_coords
+
+
     def _calculate_center_line(self, left_coords: List[Tuple[float, float]], 
                               right_coords: List[Tuple[float, float]]) -> Tuple[List[Tuple[float, float]], List[Dict]]:
         """计算两条边界线的中心线和对应的宽度变化，保持复杂形状
@@ -1265,16 +2997,22 @@ class GeometryConverter:
         center_coords = []
         width_data = []
         current_s = 0.0
+
+        # 计算起始宽度和终点宽度
+        start_width = math.sqrt((left_coords[0][0] - right_coords[0][0])**2 + (left_coords[0][1] - right_coords[0][1])**2)
+        end_width = math.sqrt((left_coords[-1][0] - right_coords[-1][0])**2 + (left_coords[-1][1] - right_coords[-1][1])**2)
         
         for i, (left_pt, right_pt) in enumerate(zip(left_interpolated, right_interpolated)):
             center_x = (left_pt[0] + right_pt[0]) / 2
             center_y = (left_pt[1] + right_pt[1]) / 2
             center_coords.append((center_x, center_y))
             
-            # 计算当前点的宽度
-            width = math.sqrt((left_pt[0] - right_pt[0])**2 + (left_pt[1] - right_pt[1])**2)
+            # 根据当前点在插值点列表中的位置进行线性插值计算宽度
+            alpha = i / (len(left_interpolated) - 1) if len(left_interpolated) > 1 else 0.0
+            interpolated_width = start_width * (1 - alpha) + end_width * alpha
+
             # 应用坐标精度控制
-            width = round(width, self.coordinate_precision)
+            width = round(interpolated_width, self.coordinate_precision)
             
             width_info = {
                 's': current_s,
@@ -1630,6 +3368,10 @@ class GeometryConverter:
         
         # 计算总的参考线长度
         total_length = sum(segment['length'] for segment in center_segments)
+
+        # 计算起始宽度和终点宽度
+        start_width = math.sqrt((left_coords[0][0] - right_coords[0][0])**2 + (left_coords[0][1] - right_coords[0][1])**2)
+        end_width = math.sqrt((left_coords[-1][0] - right_coords[-1][0])**2 + (left_coords[-1][1] - right_coords[-1][1])**2)
         
         # 优化采样策略：基于道路长度自适应确定采样点数量，避免过拟合
         # 采用更合理的采样密度，减少控制点数量
@@ -1659,25 +3401,23 @@ class GeometryConverter:
                 logger.warning(f"无法在s={current_s:.2f}处找到参考点")
                 continue
             
-            # 找到最接近参考点的左右边界点（使用新的两点方法）
-            left_pts = self._find_closest_two_points(left_coords, ref_point)
-            right_pts = self._find_closest_two_points(right_coords, ref_point)
-            
-            # 计算垂直于参考线的车道宽度（使用直线交点方法）
-            width = self._calculate_line_intersection_width(left_pts, right_pts, ref_point, ref_heading)
+            # 根据s坐标在总长度中的比例进行线性插值计算宽度
+            alpha = current_s / total_length if total_length > 0 else 0.0
+            interpolated_width = start_width * (1 - alpha) + end_width * alpha
+            width = round(interpolated_width, self.coordinate_precision)
             
             # 添加详细的宽度计算日志
-            logger.debug(f"宽度计算 - s={current_s:.2f}: 左边界{left_pts}, 右边界{right_pts}, 参考点{ref_point}, 宽度={width:.3f}")
+            logger.debug(f"宽度计算 - s={current_s:.2f}: 参考点{ref_point}, 插值宽度={width:.3f}")
             
             # 检查宽度为0的情况
             if width <= 0.001:  # 小于1mm认为是异常
-                logger.warning(f"检测到异常宽度 - s={current_s:.2f}: 宽度={width:.6f}, 左边界{left_pts}, 右边界{right_pts}, 参考点{ref_point}, 航向角={ref_heading:.3f}")
+                logger.warning(f"检测到异常宽度 - s={current_s:.2f}: 宽度={width:.6f}, 左边界长度={len(left_coords)}, 右边界长度={len(right_coords)}, 参考点{ref_point}, 航向角={ref_heading:.3f}")
             
             width_data = {
                 's': current_s,
                 'width': width,
-                'left_point': left_pts[0] if left_pts else ref_point,
-                'right_point': right_pts[0] if right_pts else ref_point,
+                'left_point': left_coords[0] if left_coords else ref_point,
+                'right_point': right_coords[0] if right_coords else ref_point,
                 'reference_point': ref_point,
                 'reference_heading': ref_heading
             }
@@ -2166,7 +3906,7 @@ class GeometryConverter:
         
         return (intersection_x, intersection_y)
     
-    def _fit_polynomial_curves(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
+    def _fit_polynomial_curves(self, coordinates: List[Tuple[float, float]], surface_id: str = None, connection_manager = None, road_id: str = None, line_connection_manager: 'RoadLineConnectionManager' = None, start_heading: float = None, end_heading: float = None) -> List[Dict]:
         """使用高精度多项式拟合曲线段，直接生成ParamPoly3几何类型
         
         优化改进：
@@ -2178,6 +3918,12 @@ class GeometryConverter:
         
         Args:
             coordinates: 坐标点列表
+            surface_id: 道路面ID（可选）
+            connection_manager: 连接管理器（可选）
+            road_id: 道路线ID（可选）
+            line_connection_manager: 道路线连接管理器（可选）
+            start_heading: 起点航向角约束（弧度，可选）
+            end_heading: 终点航向角约束（弧度，可选）
             
         Returns:
             List[Dict]: ParamPoly3几何段列表
@@ -2185,9 +3931,95 @@ class GeometryConverter:
         if len(coordinates) < 3:
             return self.fit_line_segments(coordinates)
         
-        # 检测是否需要分段拟合
+        # 计算起始点的航向角（优先使用传入的约束，否则计算）
+        if start_heading is None:
+            start_heading = self._calculate_precise_heading(coordinates[:min(3, len(coordinates))])
+        
+        # 计算终点航向角（优先使用传入的约束，否则计算）
+        if end_heading is None and len(coordinates) >= 2:
+            # 使用最后几个点计算终点航向角
+            end_coords = coordinates[-min(3, len(coordinates)):]
+            if len(end_coords) >= 2:
+                # 反向计算终点航向角
+                reversed_coords = list(reversed(end_coords))
+                end_heading = self._calculate_precise_heading(reversed_coords)
+                # 由于是反向计算，需要加π来得到正确的方向
+                end_heading = (end_heading + math.pi) % (2 * math.pi)
+        
+        # 进行统一斜率调整（起点）
+        if surface_id and connection_manager:
+            # 首先检查是否有节点的统一航向角
+            surface_info = connection_manager.road_surfaces.get(surface_id)
+            if surface_info:
+                # 优先使用已存储的 s_node_id，其次回退到原始数据中的 attributes
+                s_node_id = surface_info.get('s_node_id')
+                if s_node_id is None:
+                    s_node_id = surface_info.get('data', {}).get('attributes', {}).get('SNodeID')
+                if s_node_id and s_node_id in connection_manager.node_headings:
+                    unified_start_heading = connection_manager.node_headings[s_node_id]
+                    start_heading = unified_start_heading
+                    logger.info(f"高精度多项式拟合曲线段 道路面 {surface_id} 起始航向角调整为节点 {s_node_id} 的统一斜率: {math.degrees(start_heading):.2f}°")
+                    print(f"高精度多项式拟合曲线段 道路面 {surface_id} 起始航向角调整为节点 {s_node_id} 的统一斜率: {math.degrees(start_heading):.2f}°")
+                else:
+                    # 如果没有节点统一航向角，则使用前继道路的终点航向角
+                    predecessors = connection_manager.get_predecessors(surface_id)
+                    if predecessors:
+                        predecessor_id = predecessors[0]  # 假设只有一个前继
+                        predecessor_end_heading = connection_manager.get_surface_end_heading(predecessor_id)
+                        if predecessor_end_heading is not None:
+                            start_heading = predecessor_end_heading
+                            logger.debug(f"高精度多项式拟合曲线段 道路面 {surface_id} 起始航向角调整为前继道路 {predecessor_id} 的终点航向角: {math.degrees(start_heading):.2f}°")
+        
+        # 如果有road_id和line_connection_manager，进行道路线的斜率一致性调整
+        if road_id and line_connection_manager:
+            # 检查是否有统一的起点斜率
+            road_info = line_connection_manager.road_lines.get(road_id)
+            if road_info:
+                s_node_id = road_info['s_node_id']
+                if s_node_id and s_node_id in line_connection_manager.node_headings:
+                    unified_start_heading = line_connection_manager.node_headings[s_node_id]
+                    start_heading = unified_start_heading
+                    logger.info(f"高精度多项式拟合曲线段 道路线 {road_id} 起始航向角调整为节点 {s_node_id} 的统一斜率: {math.degrees(start_heading):.2f}°")
+                    print(f"高精度多项式拟合曲线段 道路线 {road_id} 起始航向角调整为节点 {s_node_id} 的统一斜率: {math.degrees(start_heading):.2f}°")
+        
+        # 进行统一斜率调整（终点）
+        if surface_id and connection_manager:
+            # 首先检查是否有节点的统一航向角
+            surface_info = connection_manager.road_surfaces.get(surface_id)
+            if surface_info:
+                # 优先使用已存储的 e_node_id，其次回退到原始数据中的 attributes
+                e_node_id = surface_info.get('e_node_id')
+                if e_node_id is None:
+                    e_node_id = surface_info.get('data', {}).get('attributes', {}).get('ENodeID')
+                if e_node_id and e_node_id in connection_manager.node_headings:
+                    unified_end_heading = connection_manager.node_headings[e_node_id]
+                    end_heading = unified_end_heading
+                    logger.info(f"高精度多项式拟合曲线段 道路面 {surface_id} 终点航向角调整为节点 {e_node_id} 的统一斜率: {math.degrees(end_heading):.2f}°")
+                    print(f"高精度多项式拟合曲线段 道路面 {surface_id} 终点航向角调整为节点 {e_node_id} 的统一斜率: {math.degrees(end_heading):.2f}°")
+                else:
+                    # 如果没有节点统一航向角，则使用后继道路的起始航向角
+                    successors = connection_manager.get_successors(surface_id)
+                    if successors:
+                        successor_id = successors[0]  # 假设只有一个后继
+                        successor_start_heading = connection_manager.get_surface_start_heading(successor_id)
+                        if successor_start_heading is not None:
+                            end_heading = successor_start_heading
+                            logger.debug(f"道路面 {surface_id} 终点航向角调整为后继道路 {successor_id} 的起始航向角: {math.degrees(end_heading):.2f}°")
+        
+        # 如果有道路线连接管理器，调整终点航向角
+        if road_id and line_connection_manager:
+            road_info = line_connection_manager.road_lines.get(road_id)
+            if road_info:
+                e_node_id = road_info['e_node_id']
+                if e_node_id and e_node_id in line_connection_manager.node_headings:
+                    unified_end_heading = line_connection_manager.node_headings[e_node_id]
+                    end_heading = unified_end_heading
+                    logger.info(f"高精度多项式拟合曲线段 道路线 {road_id} 终点航向角调整为节点 {e_node_id} 的统一斜率: {math.degrees(end_heading):.2f}°")
+                    print(f"高精度多项式拟合曲线段 道路线 {road_id} 终点航向角调整为节点 {e_node_id} 的统一斜率: {math.degrees(end_heading):.2f}°")
+        
+        # 检测是否需要分段拟合（在统一斜率调整之后）
         if len(coordinates) > 20:  # 对于复杂曲线使用分段拟合
-            return self._fit_segmented_polynomial_curves(coordinates)
+            return self._fit_segmented_polynomial_curves(coordinates, start_heading, end_heading, surface_id, road_id)
         
         segments = []
         current_s = 0.0
@@ -2207,24 +4039,60 @@ class GeometryConverter:
         # 归一化弧长参数
         t_params = arc_lengths / total_length
         
-        try:
-            # 计算起始点的航向角（使用更多点提高精度）
+        # 计算起始点的航向角（优先使用传入的约束，否则计算）
+        if start_heading is None:
             start_heading = self._calculate_precise_heading(coordinates[:min(3, len(coordinates))])
+        
+        # 计算终点航向角（优先使用传入的约束，否则计算）
+        if end_heading is None and len(coordinates) >= 2:
+            # 使用最后几个点计算终点航向角
+            end_coords = coordinates[-min(3, len(coordinates)):]
+            if len(end_coords) >= 2:
+                # 反向计算终点航向角
+                reversed_coords = list(reversed(end_coords))
+                end_heading = self._calculate_precise_heading(reversed_coords)
+                # 由于是反向计算，需要加π来得到正确的方向
+                end_heading = (end_heading + math.pi) % (2 * math.pi)
+        
+        # 将坐标转换为局部坐标系
+        start_x, start_y = x_coords[0], y_coords[0]
+        cos_hdg = math.cos(start_heading)
+        sin_hdg = math.sin(start_heading)
+        
+        # 转换为局部坐标系
+        local_u = np.zeros(len(coordinates))
+        local_v = np.zeros(len(coordinates))
+        
+        for i in range(len(coordinates)):
+            dx = x_coords[i] - start_x
+            dy = y_coords[i] - start_y
+            local_u[i] = dx * cos_hdg + dy * sin_hdg
+            local_v[i] = -dx * sin_hdg + dy * cos_hdg
+        
+        # 检查是否有边界约束
+        has_boundary_constraints = (start_heading is not None and end_heading is not None)
+        
+        if has_boundary_constraints:
+            # 有边界约束：直接求解，跳过np.polyfit
+            logger.debug("检测到边界约束，使用直接约束求解方法")
             
-            # 将坐标转换为局部坐标系
-            start_x, start_y = x_coords[0], y_coords[0]
-            cos_hdg = math.cos(start_heading)
-            sin_hdg = math.sin(start_heading)
+            # 选择合适的多项式阶数（至少3次以满足边界约束）
+            optimal_degree = max(3, self._select_optimal_polynomial_degree(t_params, local_u, local_v))
             
-            # 转换为局部坐标系
-            local_u = np.zeros(len(coordinates))
-            local_v = np.zeros(len(coordinates))
+            # 直接求解边界约束，无需初始拟合
+            au, bu, cu, du, av, bv, cv, dv = self._solve_boundary_constraints(
+                local_u, local_v, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, optimal_degree,
+                start_heading, end_heading, total_length
+            )
             
-            for i in range(len(coordinates)):
-                dx = x_coords[i] - start_x
-                dy = y_coords[i] - start_y
-                local_u[i] = dx * cos_hdg + dy * sin_hdg
-                local_v[i] = -dx * sin_hdg + dy * cos_hdg
+            # 评估约束求解的质量
+            fitting_error = self._evaluate_constraint_solution_quality(
+                t_params, local_u, local_v, au, bu, cu, du, av, bv, cv, dv
+            )
+            
+        else:
+            # 无边界约束：使用传统的np.polyfit方法
+            logger.debug("无边界约束，使用传统多项式拟合方法")
             
             # 自适应选择最优多项式阶数
             optimal_degree = self._select_optimal_polynomial_degree(t_params, local_u, local_v)
@@ -2240,9 +4108,9 @@ class GeometryConverter:
             fitting_error = self._evaluate_fitting_quality(t_params, local_u, local_v, poly_u, poly_v)
             
             # 如果拟合误差过大，降低阶数重新拟合
-            if fitting_error > self.tolerance and optimal_degree > 2:
+            if fitting_error > self.tolerance and optimal_degree > 3:
                 logger.debug(f"拟合误差过大({fitting_error:.3f}m)，降低多项式阶数重新拟合")
-                optimal_degree = max(2, optimal_degree - 1)
+                optimal_degree = max(3, optimal_degree - 1)
                 poly_u = np.polyfit(t_params, local_u, optimal_degree, w=weights)
                 poly_v = np.polyfit(t_params, local_v, optimal_degree, w=weights)
                 fitting_error = self._evaluate_fitting_quality(t_params, local_u, local_v, poly_u, poly_v)
@@ -2262,41 +4130,49 @@ class GeometryConverter:
             cv = float(poly_v_padded[2]) if len(poly_v_padded) > 2 else 0.0
             dv = float(poly_v_padded[3]) if len(poly_v_padded) > 3 else 0.0
             
-            # 优化边界条件处理
-            au, bu, cu, du, av, bv, cv, dv = self._optimize_boundary_conditions(
-                local_u, local_v, au, bu, cu, du, av, bv, cv, dv, optimal_degree
-            )
-            
-            # 创建ParamPoly3几何段
-            segment = {
-                'type': 'parampoly3',
-                's': current_s,
-                'x': float(x_coords[0]),
-                'y': float(y_coords[0]),
-                'hdg': start_heading,
-                'length': total_length,
-                'au': au,
-                'bu': bu,
-                'cu': cu,
-                'du': du,
-                'av': av,
-                'bv': bv,
-                'cv': cv,
-                'dv': dv,
-                'fitting_error': fitting_error,
-                'polynomial_degree': optimal_degree
-            }
-            
-            segments.append(segment)
-            
-            logger.debug(f"高精度ParamPoly3拟合完成，点数: {len(coordinates)}, 长度: {total_length:.2f}m, 阶数: {optimal_degree}, 误差: {fitting_error:.4f}m")
-            logger.debug(f"多项式系数 - au:{au:.8f}, bu:{bu:.8f}, cu:{cu:.8f}, du:{du:.8f}")
-            logger.debug(f"多项式系数 - av:{av:.8f}, bv:{bv:.8f}, cv:{cv:.8f}, dv:{dv:.8f}")
-            
-        except Exception as e:
-            logger.warning(f"高精度ParamPoly3拟合失败: {e}，回退到直线拟合")
-            segments = self.fit_line_segments(coordinates)
+            # 对无约束拟合结果应用位置约束（如果需要）
+            if len(local_u) > 0:
+                end_u, end_v = local_u[-1], local_v[-1]
+                au, bu, cu, du, av, bv, cv, dv = self._solve_boundary_constraints(
+                    local_u, local_v, au, bu, cu, du, av, bv, cv, dv, optimal_degree,
+                    None, None, total_length
+                )
         
+        # 创建ParamPoly3几何段
+        segment = {
+            'type': 'parampoly3',
+            's': current_s,
+            'x': float(x_coords[0]),
+            'y': float(y_coords[0]),
+            'hdg': start_heading,
+            'length': total_length,
+            'au': au,
+            'bu': bu,
+            'cu': cu,
+            'du': du,
+            'av': av,
+            'bv': bv,
+            'cv': cv,
+            'dv': dv,
+            'fitting_error': fitting_error,
+            'polynomial_degree': optimal_degree
+        }
+        
+        segments.append(segment)
+        
+        # 添加调试信息，显示最终的hdg值和多项式系数
+        if road_id:
+            logger.info(f"道路线 {road_id} ParamPoly3几何段最终hdg值: {math.degrees(start_heading):.2f}° ({start_heading:.6f}弧度)")
+            logger.info(f"道路线 {road_id} 多项式系数: au={au:.6f}, bu={bu:.6f}, cu={cu:.6f}, du={du:.6f}")
+            logger.info(f"道路线 {road_id} 多项式系数: av={av:.6f}, bv={bv:.6f}, cv={cv:.6f}, dv={dv:.6f}")
+            print(f"道路线 {road_id} ParamPoly3几何段最终hdg值: {math.degrees(start_heading):.2f}° ({start_heading:.6f}弧度)")
+            print(f"道路线 {road_id} 多项式系数: au={au:.6f}, bu={bu:.6f}, cu={cu:.6f}, du={du:.6f}")
+            print(f"道路线 {road_id} 多项式系数: av={av:.6f}, bv={bv:.6f}, cv={cv:.6f}, dv={dv:.6f}")
+        
+        logger.debug(f"高精度ParamPoly3拟合完成，点数: {len(coordinates)}, 长度: {total_length:.2f}m, 阶数: {optimal_degree}, 误差: {fitting_error:.4f}m")
+        logger.debug(f"多项式系数 - au:{au:.8f}, bu:{bu:.8f}, cu:{cu:.8f}, du:{du:.8f}")
+        logger.debug(f"多项式系数 - av:{av:.8f}, bv:{bv:.8f}, cv:{cv:.8f}, dv:{dv:.8f}")
+
         return segments
     
     def _fit_spline_curves(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:

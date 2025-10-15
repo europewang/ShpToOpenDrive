@@ -6,7 +6,7 @@
   "default_num_lanes": 1,
   "default_speed_limit": 50,
   "use_arc_fitting": false,
-  "curve_fitting_mode": "polynomial",
+  "curve_fitting_mode": "parampoly3",
   "polynomial_degree": 3,
   "curve_smoothness": 0.4,
   "use_smooth_curves": true,

@@ -15,7 +15,7 @@ sys.path.insert(0, str(src_path))
 from shp_reader import ShapefileReader
 from geometry_converter import GeometryConverter
 from opendrive_generator import OpenDriveGenerator
-from main import ShpToOpenDriveConverter
+from shp2xodr import ShpToOpenDriveConverter
 
 def test_testlane_shp():
     """测试TestLane.shp文件"""

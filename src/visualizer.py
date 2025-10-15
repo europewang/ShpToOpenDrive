@@ -242,7 +242,7 @@ class RoadVisualizer:
             messagebox.showwarning("警告", "请先加载SHP或OpenDRIVE文件")
             return
         
-        # 在新线程中启动可视化，避免阻塞GUI
+        # 在新线程中启动可视化, 避免阻塞GUI
         threading.Thread(target=self._run_visualization, daemon=True).start()
     
     def _run_visualization(self):
@@ -376,7 +376,7 @@ class RoadVisualizer:
             # 转换几何数据
             converted_data = []
             for feature in self.current_shp_data:
-                # geometry字段直接是LineString对象，不是字典
+                # geometry字段直接是LineString对象, 不是字典
                 geometry = feature.get('geometry')
                 if geometry is not None and hasattr(geometry, 'coords'):
                     # 使用coordinates字段获取坐标列表
@@ -409,7 +409,7 @@ class RoadVisualizer:
             elif format_type == "ply":
                 o3d.io.write_line_set(file_path, line_set)
             elif format_type == "stl":
-                # STL需要三角网格，将线集转换为管道网格
+                # STL需要三角网格, 将线集转换为管道网格
                 mesh = self._line_set_to_mesh(line_set)
                 o3d.io.write_triangle_mesh(file_path, mesh)
             else:

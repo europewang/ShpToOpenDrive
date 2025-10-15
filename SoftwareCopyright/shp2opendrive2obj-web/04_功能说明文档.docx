@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>功能说明文档</title>
+    <style>
+        body {
+            font-family: '宋体', SimSun, serif;
+            font-size: 12pt;
+            line-height: 1.5;
+            margin: 2.5cm;
+        }
+        .header {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        .subsection-title {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            margin-top: 15px;
+        }
+        .field {
+            margin-bottom: 8px;
+        }
+        .field-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 150px;
+        }
+        .red-text {
+            color: red;
+            font-weight: bold;
+        }
+        .code-block {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        .page-header {
+            position: fixed;
+            top: 1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        .page-footer {
+            position: fixed;
+            bottom: 1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        .feature-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .workflow-step {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .tech-highlight {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .innovation-box {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .diagram-placeholder {
+            border: 2px dashed #ccc;
+            padding: 30px;
+            text-align: center;
+            margin: 15px 0;
+            background-color: #f9f9f9;
+        }
+        .function-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .function-list li {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+        }
+        .function-list li:before {
+            content: "✓";
+            color: #28a745;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">ShpToOpenDrive2Obj-Web v1.0.0 功能说明文档</div>
+    
+    <div class="header">ShpToOpenDrive2Obj-Web v1.0.0<br>功能说明文档</div>
+    
+    <div class="section">
+        <div class="section-title">1. 软件功能概述</div>
+        
+        <div style="margin-left: 20px;">
+            ShpToOpenDrive2Obj-Web是一个基于Web技术的综合性地理信息数据转换平台，专门设计用于处理道路数据的格式转换和三维可视化。该软件集成了先进的地理信息处理算法、实时Web服务技术和三维图形渲染技术，为用户提供从Shapefile到OpenDRIVE再到OBJ 3D模型的完整转换解决方案。
+        </div>
+        
+        <div class="feature-box">
+            <strong>核心价值：</strong><br>
+            • 简化复杂的地理数据转换流程<br>
+            • 提供直观的Web操作界面<br>
+            • 支持实时3D可视化预览<br>
+            • 确保高精度的数据转换质量<br>
+            • 满足自动驾驶和智能交通系统的数据需求
+        </div>
+        
+        <div class="subsection-title">1.1 主要应用领域</div>
+        
+        <table>
+            <tr>
+                <th>应用领域</th>
+                <th>具体应用</th>
+                <th>技术优势</th>
+            </tr>
+            <tr>
+                <td>自动驾驶</td>
+                <td>仿真环境构建、路径规划数据准备</td>
+                <td>高精度道路模型、标准化数据格式</td>
+            </tr>
+            <tr>
+                <td>智能交通</td>
+                <td>交通仿真、路网分析、信号优化</td>
+                <td>实时处理、多格式支持、可视化分析</td>
+            </tr>
+            <tr>
+                <td>地图制作</td>
+                <td>高精度地图生成、导航数据制作</td>
+                <td>精确几何处理、拓扑关系保持</td>
+            </tr>
+            <tr>
+                <td>城市规划</td>
+                <td>道路设计、交通影响评估</td>
+                <td>3D可视化、多方案对比</td>
+            </tr>
+            <tr>
+                <td>游戏开发</td>
+                <td>虚拟世界道路建模、场景构建</td>
+                <td>高质量3D模型、优化的渲染性能</td>
+            </tr>
+        </table>
+        
+        <div class="subsection-title">1.2 技术架构特点</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>前后端分离架构：</strong>采用现代Web开发模式，前端负责用户交互，后端专注数据处理<br>
+            • <strong>微服务设计：</strong>模块化的服务架构，便于扩展和维护<br>
+            • <strong>异步处理机制：</strong>支持大文件的非阻塞处理，提升用户体验<br>
+            • <strong>实时通信：</strong>WebSocket技术实现实时进度更新和状态同步<br>
+            • <strong>云原生支持：</strong>支持容器化部署和云平台集成
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">2. 详细功能说明</div>
+        
+        <div class="subsection-title">2.1 数据输入功能</div>
+        
+        <div class="feature-box">
+            <strong>2.1.1 文件上传系统</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>多种上传方式：</strong>支持点击选择、拖拽上传、批量上传等多种文件上传方式</li>
+                <li><strong>格式自动检测：</strong>自动识别Shapefile格式及其相关文件（.shp, .shx, .dbf, .prj, .cpg）</li>
+                <li><strong>实时进度显示：</strong>显示上传进度、传输速度和剩余时间</li>
+                <li><strong>断点续传：</strong>支持大文件的断点续传功能，确保上传稳定性</li>
+                <li><strong>文件预检查：</strong>上传前进行文件完整性和格式有效性检查</li>
+            </ul>
+        </div>
+        
+        <div class="feature-box">
+            <strong>2.1.2 数据验证与预处理</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>几何有效性检查：</strong>验证线段的连续性、方向一致性和拓扑正确性</li>
+                <li><strong>坐标系识别：</strong>自动识别和转换不同的坐标参考系统</li>
+                <li><strong>属性数据分析：</strong>解析DBF文件中的属性信息，提取道路相关属性</li>
+                <li><strong>数据质量评估：</strong>生成数据质量报告，标识潜在问题和建议</li>
+                <li><strong>自动修复功能：</strong>对常见的数据问题进行自动修复和优化</li>
+            </ul>
+        </div>
+        
+        <div class="diagram-placeholder">
+            <span class="red-text">【此处需要插入数据输入流程图】</span><br>
+            显示从文件上传到数据验证的完整流程
+        </div>
+        
+        <div class="subsection-title">2.2 几何处理功能</div>
+        
+        <div class="feature-box">
+            <strong>2.2.1 线段处理算法</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>曲线平滑：</strong>采用B样条和贝塞尔曲线算法对道路线段进行平滑处理</li>
+                <li><strong>节点优化：</strong>智能删除冗余节点，保持几何精度的同时优化数据量</li>
+                <li><strong>方向统一：</strong>确保所有道路线段的方向一致性，符合交通流向</li>
+                <li><strong>连接点处理：</strong>处理道路交叉口和连接点的几何关系</li>
+                <li><strong>精度控制：</strong>可配置的几何精度参数，平衡精度和性能需求</li>
+            </ul>
+        </div>
+        
+        <div class="feature-box">
+            <strong>2.2.2 拓扑分析功能</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>道路网络构建：</strong>分析道路之间的连接关系，构建完整的道路网络</li>
+                <li><strong>交叉口识别：</strong>自动识别和分类不同类型的道路交叉口</li>
+                <li><strong>车道分析：</strong>根据道路宽度和属性信息推断车道数量和配置</li>
+                <li><strong>方向性处理：</strong>处理单向道路、双向道路和复杂交通组织</li>
+                <li><strong>连通性验证：</strong>确保道路网络的连通性和逻辑正确性</li>
+            </ul>
+        </div>
+        
+        <div class="subsection-title">2.3 OpenDRIVE生成功能</div>
+        
+        <div class="feature-box">
+            <strong>2.3.1 标准格式转换</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>多版本支持：</strong>支持OpenDRIVE 1.4、1.5、1.6等多个版本标准</li>
+                <li><strong>几何元素生成：</strong>生成符合标准的几何元素（直线、螺旋线、弧线等）</li>
+                <li><strong>车道信息构建：</strong>根据道路属性生成详细的车道信息和标记</li>
+                <li><strong>高程处理：</strong>处理道路的高程信息和纵断面数据</li>
+                <li><strong>标准验证：</strong>确保生成的OpenDRIVE文件符合官方标准规范</li>
+            </ul>
+        </div>
+        
+        <div class="feature-box">
+            <strong>2.3.2 高级特性支持</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>交通标志：</strong>生成道路标志和交通设施信息</li>
+                <li><strong>路面材质：</strong>定义不同的路面材质和摩擦系数</li>
+                <li><strong>边界条件：</strong>处理道路边界、护栏和其他边界设施</li>
+                <li><strong>参考线优化：</strong>生成平滑的道路参考线和几何描述</li>
+                <li><strong>元数据管理：</strong>包含完整的文件头信息和元数据描述</li>
+            </ul>
+        </div>
+        
+        <div class="subsection-title">2.4 3D建模功能</div>
+        
+        <div class="feature-box">
+            <strong>2.4.1 三维重建算法</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>表面生成：</strong>基于道路中心线和宽度信息生成三维路面</li>
+                <li><strong>高程插值：</strong>使用高级插值算法处理高程数据，生成平滑的三维表面</li>
+                <li><strong>边坡建模：</strong>生成道路边坡和路基的三维模型</li>
+                <li><strong>细节优化：</strong>添加路缘石、标线等道路细节元素</li>
+                <li><strong>LOD支持：</strong>生成多级细节模型，适应不同的应用需求</li>
+            </ul>
+        </div>
+        
+        <div class="feature-box">
+            <strong>2.4.2 材质与纹理</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>材质库：</strong>内置丰富的道路材质库（沥青、混凝土、砂石等）</li>
+                <li><strong>纹理映射：</strong>智能纹理映射算法，确保纹理的连续性和真实感</li>
+                <li><strong>UV坐标生成：</strong>自动生成优化的UV坐标，支持纹理的正确显示</li>
+                <li><strong>法向量计算：</strong>精确计算表面法向量，提升光照效果</li>
+                <li><strong>自定义材质：</strong>支持用户自定义材质和纹理导入</li>
+            </ul>
+        </div>
+        
+        <div class="subsection-title">2.5 Web可视化功能</div>
+        
+        <div class="feature-box">
+            <strong>2.5.1 实时3D渲染</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>WebGL引擎：</strong>基于WebGL技术的高性能3D渲染引擎</li>
+                <li><strong>交互控制：</strong>支持鼠标和触摸的多种交互方式（旋转、缩放、平移）</li>
+                <li><strong>多视角切换：</strong>提供俯视图、透视图、第一人称等多种观察视角</li>
+                <li><strong>实时光照：</strong>动态光照系统，支持阴影和反射效果</li>
+                <li><strong>性能优化：</strong>智能LOD切换和视锥体裁剪，确保流畅的渲染性能</li>
+            </ul>
+        </div>
+        
+        <div class="feature-box">
+            <strong>2.5.2 用户界面功能</strong><br>
+            
+            <ul class="function-list">
+                <li><strong>响应式设计：</strong>适配不同屏幕尺寸和设备类型</li>
+                <li><strong>进度监控：</strong>实时显示转换进度和处理状态</li>
+                <li><strong>参数配置：</strong>直观的参数设置界面，支持实时预览</li>
+                <li><strong>结果管理：</strong>文件管理、下载和历史记录功能</li>
+                <li><strong>错误处理：</strong>友好的错误提示和问题诊断功能</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">3. 工作流程</div>
+        
+        <div class="workflow-step">
+            <strong>步骤1：数据准备与上传</strong><br>
+            • 用户通过Web界面上传Shapefile文件<br>
+            • 系统自动检查文件完整性和格式有效性<br>
+            • 进行初步的数据质量评估和预处理
+        </div>
+        
+        <div class="workflow-step">
+            <strong>步骤2：几何分析与处理</strong><br>
+            • 解析Shapefile中的几何信息和属性数据<br>
+            • 进行拓扑分析和道路网络构建<br>
+            • 执行几何优化和精度控制处理
+        </div>
+        
+        <div class="workflow-step">
+            <strong>步骤3：OpenDRIVE格式转换</strong><br>
+            • 根据OpenDRIVE标准生成道路几何描述<br>
+            • 构建车道信息和交通设施数据<br>
+            • 生成符合标准的XML格式文件
+        </div>
+        
+        <div class="workflow-step">
+            <strong>步骤4：3D模型生成</strong><br>
+            • 基于OpenDRIVE数据进行三维重建<br>
+            • 生成路面、边坡和附属设施的3D模型<br>
+            • 应用材质和纹理，优化模型质量
+        </div>
+        
+        <div class="workflow-step">
+            <strong>步骤5：可视化与输出</strong><br>
+            • 在Web界面中实时预览3D模型<br>
+            • 提供多种格式的文件下载<br>
+            • 生成处理报告和质量评估结果
+        </div>
+        
+        <div class="diagram-placeholder">
+            <span class="red-text">【此处需要插入完整工作流程图】</span><br>
+            显示从输入到输出的完整数据处理流程
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">4. 高级功能特性</div>
+        
+        <div class="subsection-title">4.1 批量处理功能</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>并行处理：</strong>支持多文件同时处理，充分利用系统资源<br>
+            • <strong>队列管理：</strong>智能任务队列，自动调度和优先级管理<br>
+            • <strong>进度监控：</strong>实时监控所有任务的处理进度和状态<br>
+            • <strong>错误恢复：</strong>自动重试机制和错误恢复功能<br>
+            • <strong>资源控制：</strong>动态资源分配，防止系统过载
+        </div>
+        
+        <div class="subsection-title">4.2 质量控制系统</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>多层验证：</strong>输入验证、处理验证、输出验证的多层质量控制<br>
+            • <strong>标准检查：</strong>严格按照OpenDRIVE标准进行格式和内容检查<br>
+            • <strong>几何验证：</strong>检查几何连续性、拓扑正确性和精度符合性<br>
+            • <strong>报告生成：</strong>详细的质量报告，包含问题描述和改进建议<br>
+            • <strong>自动修复：</strong>对检测到的问题进行自动修复和优化
+        </div>
+        
+        <div class="subsection-title">4.3 参数化配置</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>精度控制：</strong>可调节的几何精度和简化程度<br>
+            • <strong>格式选项：</strong>支持不同版本的OpenDRIVE标准<br>
+            • <strong>建模参数：</strong>3D建模的细节级别和质量设置<br>
+            • <strong>性能优化：</strong>处理速度和质量的平衡配置<br>
+            • <strong>输出定制：</strong>自定义输出格式和文件组织方式
+        </div>
+        
+        <div class="subsection-title">4.4 扩展接口</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>API接口：</strong><span class="red-text">【如果提供API，请详细描述】</span><br>
+            • <strong>插件系统：</strong><span class="red-text">【如果支持插件，请详细描述】</span><br>
+            • <strong>数据库集成：</strong><span class="red-text">【如果支持数据库，请详细描述】</span><br>
+            • <strong>云服务集成：</strong><span class="red-text">【如果支持云服务，请详细描述】</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">5. 性能特性</div>
+        
+        <div class="subsection-title">5.1 处理能力</div>
+        
+        <table>
+            <tr>
+                <th>性能指标</th>
+                <th>数值</th>
+                <th>说明</th>
+            </tr>
+            <tr>
+                <td>最大文件大小</td>
+                <td><span class="red-text">【请提供实际数据】</span></td>
+                <td>单个Shapefile文件的最大支持大小</td>
+            </tr>
+            <tr>
+                <td>处理速度</td>
+                <td><span class="red-text">【请提供性能数据】</span></td>
+                <td>典型道路数据的处理速度</td>
+            </tr>
+            <tr>
+                <td>并发处理</td>
+                <td><span class="red-text">【请提供并发数量】</span></td>
+                <td>同时处理的最大任务数量</td>
+            </tr>
+            <tr>
+                <td>内存使用</td>
+                <td><span class="red-text">【请提供内存数据】</span></td>
+                <td>典型处理任务的内存占用</td>
+            </tr>
+            <tr>
+                <td>响应时间</td>
+                <td><span class="red-text">【请提供响应时间】</span></td>
+                <td>Web界面的平均响应时间</td>
+            </tr>
+        </table>
+        
+        <div class="subsection-title">5.2 优化技术</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>算法优化：</strong>采用高效的几何处理和拓扑分析算法<br>
+            • <strong>内存管理：</strong>智能内存分配和垃圾回收机制<br>
+            • <strong>缓存策略：</strong>多级缓存系统，提升重复操作的性能<br>
+            • <strong>并行计算：</strong>充分利用多核处理器的并行计算能力<br>
+            • <strong>流式处理：</strong>大文件的流式处理，减少内存占用
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">6. 输出格式说明</div>
+        
+        <div class="subsection-title">6.1 OpenDRIVE格式</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>文件扩展名：</strong>.xodr<br>
+            • <strong>格式标准：</strong>OpenDRIVE 1.4/1.5/1.6<br>
+            • <strong>编码格式：</strong>UTF-8 XML<br>
+            • <strong>坐标系统：</strong>支持多种坐标参考系统<br>
+            • <strong>精度控制：</strong>可配置的几何精度参数
+        </div>
+        
+        <div class="subsection-title">6.2 OBJ 3D模型格式</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>主文件：</strong>.obj（几何数据）<br>
+            • <strong>材质文件：</strong>.mtl（材质定义）<br>
+            • <strong>纹理文件：</strong>.jpg/.png（纹理贴图）<br>
+            • <strong>坐标系统：</strong>右手坐标系<br>
+            • <strong>单位：</strong>米（可配置）
+        </div>
+        
+        <div class="subsection-title">6.3 质量报告格式</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>HTML报告：</strong>详细的可视化质量报告<br>
+            • <strong>PDF报告：</strong>适合打印和存档的报告格式<br>
+            • <strong>JSON数据：</strong>机器可读的质量数据<br>
+            • <strong>统计信息：</strong>处理统计和性能指标<br>
+            • <strong>问题清单：</strong>发现的问题和建议解决方案
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">7. 应用场景</div>
+        
+        <div class="subsection-title">7.1 自动驾驶仿真</div>
+        
+        <div style="margin-left: 20px;">
+            • 为自动驾驶算法提供标准化的道路数据<br>
+            • 支持大规模仿真环境的快速构建<br>
+            • 确保仿真数据的精度和一致性<br>
+            • 兼容主流仿真平台和工具链
+        </div>
+        
+        <div class="subsection-title">7.2 智能交通系统</div>
+        
+        <div style="margin-left: 20px;">
+            • 交通流仿真和优化分析<br>
+            • 智能信号控制系统数据准备<br>
+            • 交通事故分析和预防<br>
+            • 道路容量评估和改进
+        </div>
+        
+        <div class="subsection-title">7.3 高精度地图制作</div>
+        
+        <div style="margin-left: 20px;">
+            • 导航系统的高精度地图数据<br>
+            • 车道级定位和导航服务<br>
+            • 地图数据的标准化处理<br>
+            • 多源数据的融合和验证
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">8. 技术创新点</div>
+        
+        <div class="innovation-box">
+            <strong>8.1 Web原生架构</strong><br>
+            • 首创基于Web的OpenDRIVE转换平台<br>
+            • 无需安装客户端，降低使用门槛<br>
+            • 跨平台兼容性，支持多种操作系统<br>
+            • 实时协作和云端处理能力
+        </div>
+        
+        <div class="innovation-box">
+            <strong>8.2 智能几何处理</strong><br>
+            • 自适应曲线平滑算法<br>
+            • 智能拓扑分析和修复<br>
+            • 多精度级别的几何优化<br>
+            • 自动质量检查和验证
+        </div>
+        
+        <div class="innovation-box">
+            <strong>8.3 实时3D可视化</strong><br>
+            • 基于WebGL的高性能渲染<br>
+            • 实时交互和多视角预览<br>
+            • 动态LOD和性能优化<br>
+            • 移动设备友好的触摸控制
+        </div>
+        
+        <div class="innovation-box">
+            <strong>8.4 一体化处理流程</strong><br>
+            • 从Shapefile到3D模型的完整流程<br>
+            • 自动化的数据验证和质量控制<br>
+            • 批量处理和并行计算支持<br>
+            • 灵活的参数配置和输出定制
+        </div>
+        
+        <div class="tech-highlight">
+            <strong>技术优势总结：</strong><br>
+            本软件在地理信息数据转换领域具有显著的技术优势，特别是在Web化、自动化和可视化方面实现了重要突破。通过集成先进的算法和现代Web技术，为用户提供了前所未有的便捷性和专业性。
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">9. 版本信息与更新</div>
+        
+        <div class="subsection-title">9.1 当前版本特性</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>版本号：</strong>v1.0.0<br>
+            • <strong>发布日期：</strong><span class="red-text">【请填写发布日期】</span><br>
+            • <strong>主要特性：</strong>完整的Shapefile到OpenDRIVE到OBJ转换流程<br>
+            • <strong>支持平台：</strong>Windows, macOS, Linux<br>
+            • <strong>浏览器支持：</strong>Chrome, Firefox, Edge, Safari
+        </div>
+        
+        <div class="subsection-title">9.2 未来发展规划</div>
+        
+        <div style="margin-left: 20px;">
+            <span class="red-text">【请根据实际开发计划填写】</span><br>
+            • 支持更多输入格式（如DXF, KML等）<br>
+            • 增强3D可视化效果和交互功能<br>
+            • 集成机器学习算法优化转换质量<br>
+            • 提供云服务和API接口<br>
+            • 支持实时协作和版本管理
+        </div>
+    </div>
+    
+    <div class="page-footer">第 1 页 共 1 页</div>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>软件源代码文档</title>
+    <style>
+        body {
+            font-family: '宋体', SimSun, serif;
+            font-size: 12pt;
+            line-height: 1.5;
+            margin: 2.5cm;
+        }
+        .header {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        .subsection-title {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            margin-top: 15px;
+        }
+        .field {
+            margin-bottom: 8px;
+        }
+        .field-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 150px;
+        }
+        .red-text {
+            color: red;
+            font-weight: bold;
+        }
+        .code-block {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        .page-header {
+            position: fixed;
+            top: 1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        .page-footer {
+            position: fixed;
+            bottom: 1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        .note {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .warning {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">ShpToOpenDrive2Obj-Web v1.0.0 软件源代码文档</div>
+    
+    <div class="header">ShpToOpenDrive2Obj-Web v1.0.0<br>软件源代码文档</div>
+    
+    <div class="section">
+        <div class="section-title">1. 源代码文档说明</div>
+        
+        <div class="note">
+            <strong>重要说明：</strong>本文档用于软件著作权申请中的源代码材料准备。根据《计算机软件著作权登记办法》要求，需要提交源代码的前30页和后30页，每页不少于50行代码。
+        </div>
+        
+        <div class="subsection-title">1.1 格式要求</div>
+        <div style="margin-left: 20px;">
+            • <strong>纸张：</strong>A4纸，单面打印<br>
+            • <strong>字体：</strong>宋体或Times New Roman，12号字体<br>
+            • <strong>行距：</strong>单倍行距<br>
+            • <strong>页眉：</strong>每页顶部标注"ShpToOpenDrive2Obj-Web v1.0.0"<br>
+            • <strong>页码：</strong>每页底部居中标注页码<br>
+            • <strong>行数：</strong>每页不少于50行代码（不包括空行和注释行）
+        </div>
+        
+        <div class="subsection-title">1.2 代码选择原则</div>
+        <div style="margin-left: 20px;">
+            • 选择最能体现软件功能特点的核心代码<br>
+            • 前30页：从软件入口文件开始的核心功能代码<br>
+            • 后30页：从软件主要算法和处理逻辑的结尾部分<br>
+            • 避免选择第三方库代码或自动生成的代码<br>
+            • 确保代码的连续性和完整性
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">2. 主要源代码文件清单</div>
+        
+        <table>
+            <tr>
+                <th>序号</th>
+                <th>文件名</th>
+                <th>文件路径</th>
+                <th>主要功能</th>
+                <th>代码行数</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>app.py</td>
+                <td>web/app.py</td>
+                <td>Flask Web应用主入口</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>web_server.py</td>
+                <td>web/web_server.py</td>
+                <td>Web服务器启动和配置</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td>upload_handler.py</td>
+                <td>web/handlers/upload_handler.py</td>
+                <td>文件上传处理逻辑</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>conversion_handler.py</td>
+                <td>web/handlers/conversion_handler.py</td>
+                <td>格式转换处理逻辑</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>5</td>
+                <td>shp_processor.py</td>
+                <td>web/processors/shp_processor.py</td>
+                <td>Shapefile数据处理</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>6</td>
+                <td>opendrive_generator.py</td>
+                <td>web/processors/opendrive_generator.py</td>
+                <td>OpenDRIVE格式生成</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>7</td>
+                <td>obj_converter.py</td>
+                <td>web/processors/obj_converter.py</td>
+                <td>OBJ 3D模型转换</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>8</td>
+                <td>main.js</td>
+                <td>web/static/js/main.js</td>
+                <td>前端主要交互逻辑</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>9</td>
+                <td>upload.js</td>
+                <td>web/static/js/upload.js</td>
+                <td>文件上传前端逻辑</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+            <tr>
+                <td>10</td>
+                <td>visualization.js</td>
+                <td>web/static/js/visualization.js</td>
+                <td>3D可视化显示逻辑</td>
+                <td><span class="red-text">【请填写实际行数】</span></td>
+            </tr>
+        </table>
+        
+        <div class="subsection-title">2.1 代码统计信息</div>
+        <div class="field">
+            <span class="field-label">总代码行数：</span>
+            <span class="red-text">【请统计所有源代码文件的总行数】</span>
+        </div>
+        
+        <div class="field">
+            <span class="field-label">有效代码行数：</span>
+            <span class="red-text">【请统计去除空行和注释后的有效代码行数】</span>
+        </div>
+        
+        <div class="field">
+            <span class="field-label">主要编程语言：</span>
+            Python (70%), JavaScript (25%), HTML/CSS (5%)
+        </div>
+        
+        <div class="field">
+            <span class="field-label">代码文件数量：</span>
+            <span class="red-text">【请统计源代码文件总数】</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">3. 代码提取说明</div>
+        
+        <div class="subsection-title">3.1 前30页代码选择</div>
+        <div style="margin-left: 20px;">
+            <strong>起始文件：</strong>web/app.py（Flask应用入口）<br>
+            <strong>包含内容：</strong><br>
+            • Flask应用初始化和配置<br>
+            • 路由定义和URL映射<br>
+            • 中间件和错误处理<br>
+            • 文件上传处理逻辑<br>
+            • 数据验证和安全检查<br>
+            • Shapefile解析核心代码<br>
+            • 几何数据处理算法
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>代码特征：</strong><br>
+            • 包含软件的主要入口点<br>
+            • 体现Web应用的核心架构<br>
+            • 展示文件处理和数据转换的主要流程<br>
+            • 包含关键的算法实现
+        </div>
+        
+        <div class="subsection-title">3.2 后30页代码选择</div>
+        <div style="margin-left: 20px;">
+            <strong>结束文件：</strong>web/static/js/visualization.js（3D可视化模块）<br>
+            <strong>包含内容：</strong><br>
+            • OpenDRIVE到OBJ转换算法<br>
+            • 3D模型生成和渲染<br>
+            • 前端可视化交互逻辑<br>
+            • 用户界面事件处理<br>
+            • 数据展示和结果输出<br>
+            • 错误处理和用户反馈<br>
+            • 系统清理和资源释放
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>代码特征：</strong><br>
+            • 包含软件的输出和展示功能<br>
+            • 体现3D可视化的技术特点<br>
+            • 展示用户交互和界面逻辑<br>
+            • 包含完整的处理流程结尾
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">4. 代码示例格式</div>
+        
+        <div class="subsection-title">4.1 页眉格式示例</div>
+        <div class="code-block">ShpToOpenDrive2Obj-Web v1.0.0                                    第1页</div>
+        
+        <div class="subsection-title">4.2 代码格式示例</div>
+        <div class="code-block">#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ShpToOpenDrive2Obj-Web v1.0.0
+Web-based Shapefile to OpenDRIVE and OBJ conversion platform
+Copyright (c) 2024 【请填写版权所有者】
+"""
+
+import os
+import sys
+import json
+import logging
+from flask import Flask, request, jsonify, render_template
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
+
+# 应用配置
+app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['OUTPUT_FOLDER'] = 'output'
+app.config['SECRET_KEY'] = 'your-secret-key-here'
+
+# 日志配置
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# 允许的文件扩展名
+ALLOWED_EXTENSIONS = {'shp', 'shx', 'dbf', 'prj', 'cpg'}
+
+def allowed_file(filename):
+    """
+    检查文件扩展名是否被允许
+    
+    Args:
+        filename (str): 文件名
+        
+    Returns:
+        bool: 如果文件扩展名被允许则返回True，否则返回False
+    """
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/')
+def index():
+    """
+    主页路由
+    
+    Returns:
+        str: 渲染的HTML模板
+    """
+    return render_template('index.html')
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    """
+    文件上传处理路由
+    
+    Returns:
+        json: 上传结果的JSON响应
+    """
+    try:
+        # 检查请求中是否包含文件
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': '没有选择文件'
+            }), 400
+            
+        file = request.files['file']
+        
+        # 检查文件名是否为空
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': '文件名不能为空'
+            }), 400</div>
+        
+        <div class="subsection-title">4.3 版权声明模板</div>
+        <div class="code-block">"""
+ShpToOpenDrive2Obj-Web v1.0.0
+Web-based Shapefile to OpenDRIVE and OBJ conversion platform
+
+Copyright (c) 2024 【请填写版权所有者姓名】
+All rights reserved.
+
+This software is protected by copyright law and international treaties.
+Unauthorized reproduction or distribution of this software, or any portion
+of it, may result in severe civil and criminal penalties, and will be
+prosecuted to the maximum extent possible under the law.
+
+Developed by: 【请填写开发者姓名】
+Version: 1.0.0
+Release Date: 【请填写发布日期】
+"""
+</div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">5. 提交检查清单</div>
+        
+        <table>
+            <tr>
+                <th>检查项目</th>
+                <th>要求</th>
+                <th>状态</th>
+            </tr>
+            <tr>
+                <td>页数要求</td>
+                <td>前30页 + 后30页，共60页</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+            <tr>
+                <td>行数要求</td>
+                <td>每页不少于50行有效代码</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+            <tr>
+                <td>页眉设置</td>
+                <td>每页包含软件名称和版本号</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+            <tr>
+                <td>页码标注</td>
+                <td>每页底部居中标注页码</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+            <tr>
+                <td>版权声明</td>
+                <td>在代码开头包含版权声明</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+            <tr>
+                <td>代码完整性</td>
+                <td>代码逻辑完整，能体现软件功能</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+            <tr>
+                <td>打印质量</td>
+                <td>A4纸单面打印，字迹清晰</td>
+                <td><span class="red-text">【待检查】</span></td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">6. 注意事项</div>
+        
+        <div class="warning">
+            <strong>重要提醒：</strong>
+            <ul>
+                <li>源代码必须是原创代码，不能包含第三方库的源码</li>
+                <li>代码中的软件名称和版本号必须与申请表一致</li>
+                <li>避免在代码中包含敏感信息（如密码、密钥等）</li>
+                <li>确保代码的连续性，前30页和后30页应该是连续的代码段</li>
+                <li>代码应该能够体现软件的核心功能和技术特点</li>
+                <li>所有页面必须按顺序编号，不能有缺页或重复页</li>
+                <li>如果代码总量不足60页，需要提交全部源代码</li>
+            </ul>
+        </div>
+        
+        <div class="note">
+            <strong>代码选择建议：</strong>
+            <ul>
+                <li>优先选择主要功能模块的核心代码</li>
+                <li>包含软件的入口点和主要处理流程</li>
+                <li>体现软件的技术创新点和特色功能</li>
+                <li>确保代码的可读性和专业性</li>
+                <li>避免选择配置文件、测试代码或示例代码</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="page-footer">第 1 页 共 1 页</div>
+</body>
+</html>

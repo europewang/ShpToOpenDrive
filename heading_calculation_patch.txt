@@ -1,0 +1,79 @@
+
+# 在geometry_converter.py中替换_calculate_average_heading方法
+
+def _calculate_average_heading(self, headings: List[float]) -> float:
+    """改进的平均航向角计算方法（考虑角度的周期性）
+    
+    Args:
+        headings: 航向角列表（弧度）
+        
+    Returns:
+        float: 平均航向角（弧度）
+    """
+    if not headings:
+        return 0.0
+    
+    if len(headings) == 1:
+        # 归一化单个角度
+        angle = headings[0]
+        while angle > math.pi:
+            angle -= 2 * math.pi
+        while angle < -math.pi:
+            angle += 2 * math.pi
+        return angle
+    
+    # 使用复数表示法计算平均向量
+    x_sum = sum(math.cos(h) for h in headings)
+    y_sum = sum(math.sin(h) for h in headings)
+    
+    # 检查向量是否几乎抵消（表示角度分布在±π附近）
+    magnitude = math.sqrt(x_sum**2 + y_sum**2)
+    
+    if magnitude < 1e-6:  # 向量几乎抵消，需要特殊处理
+        # 寻找最佳参考角度来减少方差
+        best_avg = None
+        min_variance = float('inf')
+        
+        for ref_angle in headings:
+            # 将所有角度相对于参考角度进行调整
+            adjusted_angles = []
+            for h in headings:
+                diff = h - ref_angle
+                # 选择最小的角度差
+                if diff > math.pi:
+                    diff -= 2 * math.pi
+                elif diff < -math.pi:
+                    diff += 2 * math.pi
+                adjusted_angles.append(ref_angle + diff)
+            
+            # 计算简单平均值
+            avg = sum(adjusted_angles) / len(adjusted_angles)
+            
+            # 计算方差
+            variance = 0.0
+            for h in headings:
+                angle_diff = h - avg
+                while angle_diff > math.pi:
+                    angle_diff -= 2 * math.pi
+                while angle_diff < -math.pi:
+                    angle_diff += 2 * math.pi
+                variance += angle_diff**2
+            variance /= len(headings)
+            
+            if variance < min_variance:
+                min_variance = variance
+                best_avg = avg
+        
+        # 归一化结果
+        if best_avg is not None:
+            while best_avg > math.pi:
+                best_avg -= 2 * math.pi
+            while best_avg < -math.pi:
+                best_avg += 2 * math.pi
+            return best_avg
+        else:
+            return 0.0
+    else:
+        # 使用复数方法的结果
+        avg_heading = math.atan2(y_sum, x_sum)
+        return avg_heading

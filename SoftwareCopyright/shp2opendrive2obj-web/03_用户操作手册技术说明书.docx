@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>用户操作手册技术说明书</title>
+    <style>
+        body {
+            font-family: '宋体', SimSun, serif;
+            font-size: 12pt;
+            line-height: 1.5;
+            margin: 2.5cm;
+        }
+        .header {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        .subsection-title {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            margin-top: 15px;
+        }
+        .field {
+            margin-bottom: 8px;
+        }
+        .field-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 150px;
+        }
+        .red-text {
+            color: red;
+            font-weight: bold;
+        }
+        .code-block {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        .page-header {
+            position: fixed;
+            top: 1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        .page-footer {
+            position: fixed;
+            bottom: 1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        .note {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .warning {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .step-box {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .screenshot-placeholder {
+            border: 2px dashed #ccc;
+            padding: 30px;
+            text-align: center;
+            margin: 15px 0;
+            background-color: #f9f9f9;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .toc-item {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        .toc-level-2 {
+            padding-left: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">ShpToOpenDrive2Obj-Web v1.0.0 用户操作手册技术说明书</div>
+    
+    <div class="header">ShpToOpenDrive2Obj-Web v1.0.0<br>用户操作手册技术说明书</div>
+    
+    <div class="section">
+        <div class="section-title">文档信息</div>
+        
+        <table>
+            <tr>
+                <th>项目</th>
+                <th>内容</th>
+            </tr>
+            <tr>
+                <td>软件名称</td>
+                <td>ShpToOpenDrive2Obj Web转换平台</td>
+            </tr>
+            <tr>
+                <td>软件版本</td>
+                <td>v1.0.0</td>
+            </tr>
+            <tr>
+                <td>文档版本</td>
+                <td>v1.0</td>
+            </tr>
+            <tr>
+                <td>编写日期</td>
+                <td><span class="red-text">【请填写文档编写日期】</span></td>
+            </tr>
+            <tr>
+                <td>编写人员</td>
+                <td><span class="red-text">【请填写文档编写人员】</span></td>
+            </tr>
+            <tr>
+                <td>审核人员</td>
+                <td><span class="red-text">【请填写文档审核人员】</span></td>
+            </tr>
+            <tr>
+                <td>适用范围</td>
+                <td>软件用户、系统管理员、技术支持人员</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">目录</div>
+        
+        <div class="toc">
+            <div class="toc-item">1. 软件概述</div>
+            <div class="toc-item toc-level-2">1.1 软件简介</div>
+            <div class="toc-item toc-level-2">1.2 主要功能</div>
+            <div class="toc-item toc-level-2">1.3 技术特点</div>
+            
+            <div class="toc-item">2. 系统要求</div>
+            <div class="toc-item toc-level-2">2.1 硬件要求</div>
+            <div class="toc-item toc-level-2">2.2 软件要求</div>
+            <div class="toc-item toc-level-2">2.3 浏览器要求</div>
+            
+            <div class="toc-item">3. 安装与部署</div>
+            <div class="toc-item toc-level-2">3.1 环境准备</div>
+            <div class="toc-item toc-level-2">3.2 软件安装</div>
+            <div class="toc-item toc-level-2">3.3 服务启动</div>
+            
+            <div class="toc-item">4. 快速入门</div>
+            <div class="toc-item toc-level-2">4.1 访问系统</div>
+            <div class="toc-item toc-level-2">4.2 文件上传</div>
+            <div class="toc-item toc-level-2">4.3 格式转换</div>
+            <div class="toc-item toc-level-2">4.4 结果下载</div>
+            
+            <div class="toc-item">5. 详细操作说明</div>
+            <div class="toc-item toc-level-2">5.1 文件管理</div>
+            <div class="toc-item toc-level-2">5.2 转换设置</div>
+            <div class="toc-item toc-level-2">5.3 3D可视化</div>
+            <div class="toc-item toc-level-2">5.4 批量处理</div>
+            
+            <div class="toc-item">6. 高级功能</div>
+            <div class="toc-item toc-level-2">6.1 参数配置</div>
+            <div class="toc-item toc-level-2">6.2 质量检查</div>
+            <div class="toc-item toc-level-2">6.3 历史记录</div>
+            
+            <div class="toc-item">7. 故障排除</div>
+            <div class="toc-item">8. 技术规范</div>
+            <div class="toc-item">9. 附录</div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">1. 软件概述</div>
+        
+        <div class="subsection-title">1.1 软件简介</div>
+        
+        <div style="margin-left: 20px;">
+            ShpToOpenDrive2Obj-Web是一个基于Web的地理信息数据转换平台，专门用于将Shapefile格式的道路数据转换为OpenDRIVE标准格式，并进一步生成OBJ 3D模型文件。该软件提供了友好的Web界面，支持在线文件上传、实时转换进度监控、3D可视化预览和结果文件下载等功能。
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>主要应用场景：</strong><br>
+            • 自动驾驶仿真数据准备<br>
+            • 智能交通系统数据转换<br>
+            • 高精度地图制作<br>
+            • 3D道路模型生成<br>
+            • 地理信息系统数据处理
+        </div>
+        
+        <div class="subsection-title">1.2 主要功能</div>
+        
+        <table>
+            <tr>
+                <th>功能模块</th>
+                <th>功能描述</th>
+                <th>技术特点</th>
+            </tr>
+            <tr>
+                <td>文件上传</td>
+                <td>支持Shapefile文件的Web上传</td>
+                <td>拖拽上传、进度显示、格式验证</td>
+            </tr>
+            <tr>
+                <td>格式转换</td>
+                <td>Shapefile到OpenDRIVE格式转换</td>
+                <td>高精度算法、实时进度、错误处理</td>
+            </tr>
+            <tr>
+                <td>3D建模</td>
+                <td>OpenDRIVE到OBJ 3D模型转换</td>
+                <td>三维重建、纹理映射、模型优化</td>
+            </tr>
+            <tr>
+                <td>可视化</td>
+                <td>在线3D模型预览和交互</td>
+                <td>WebGL渲染、交互控制、多视角</td>
+            </tr>
+            <tr>
+                <td>文件管理</td>
+                <td>转换历史和文件管理</td>
+                <td>版本控制、批量操作、云存储</td>
+            </tr>
+            <tr>
+                <td>质量控制</td>
+                <td>数据质量检查和验证</td>
+                <td>多层验证、详细报告、自动修复</td>
+            </tr>
+        </table>
+        
+        <div class="subsection-title">1.3 技术特点</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>Web原生：</strong>基于现代Web技术，无需安装客户端<br>
+            • <strong>实时处理：</strong>支持大文件的实时转换和进度监控<br>
+            • <strong>3D可视化：</strong>集成WebGL技术，提供高质量3D预览<br>
+            • <strong>跨平台：</strong>支持Windows、macOS、Linux等多种操作系统<br>
+            • <strong>高性能：</strong>优化的算法和并行处理技术<br>
+            • <strong>用户友好：</strong>直观的界面设计和操作流程
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">2. 系统要求</div>
+        
+        <div class="subsection-title">2.1 硬件要求</div>
+        
+        <table>
+            <tr>
+                <th>组件</th>
+                <th>最低要求</th>
+                <th>推荐配置</th>
+            </tr>
+            <tr>
+                <td>处理器</td>
+                <td>Intel Core i3 或 AMD 同等级</td>
+                <td>Intel Core i5 或更高</td>
+            </tr>
+            <tr>
+                <td>内存</td>
+                <td>4GB RAM</td>
+                <td>8GB RAM 或更高</td>
+            </tr>
+            <tr>
+                <td>存储空间</td>
+                <td>500MB 可用空间</td>
+                <td>2GB 可用空间</td>
+            </tr>
+            <tr>
+                <td>显卡</td>
+                <td>支持WebGL的集成显卡</td>
+                <td>独立显卡，支持OpenGL 3.0+</td>
+            </tr>
+            <tr>
+                <td>网络</td>
+                <td>宽带网络连接</td>
+                <td>高速宽带连接</td>
+            </tr>
+        </table>
+        
+        <div class="subsection-title">2.2 软件要求</div>
+        
+        <div style="margin-left: 20px;">
+            <strong>服务器端：</strong><br>
+            • 操作系统：Windows 10/11, macOS 10.15+, Ubuntu 18.04+<br>
+            • Python：3.8 或更高版本<br>
+            • 依赖库：Flask, Shapely, GDAL, NumPy等<br>
+            • 数据库：SQLite 3.0+（可选：PostgreSQL, MySQL）
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>客户端：</strong><br>
+            • 现代Web浏览器（见下节详细要求）<br>
+            • JavaScript支持<br>
+            • WebGL支持<br>
+            • 文件API支持
+        </div>
+        
+        <div class="subsection-title">2.3 浏览器要求</div>
+        
+        <table>
+            <tr>
+                <th>浏览器</th>
+                <th>最低版本</th>
+                <th>推荐版本</th>
+                <th>支持特性</th>
+            </tr>
+            <tr>
+                <td>Google Chrome</td>
+                <td>80+</td>
+                <td>最新版本</td>
+                <td>完全支持</td>
+            </tr>
+            <tr>
+                <td>Mozilla Firefox</td>
+                <td>75+</td>
+                <td>最新版本</td>
+                <td>完全支持</td>
+            </tr>
+            <tr>
+                <td>Microsoft Edge</td>
+                <td>80+</td>
+                <td>最新版本</td>
+                <td>完全支持</td>
+            </tr>
+            <tr>
+                <td>Safari</td>
+                <td>13+</td>
+                <td>最新版本</td>
+                <td>基本支持</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">3. 安装与部署</div>
+        
+        <div class="subsection-title">3.1 环境准备</div>
+        
+        <div class="step-box">
+            <strong>步骤1：安装Python环境</strong><br>
+            1. 下载并安装Python 3.8或更高版本<br>
+            2. 确保pip包管理器已安装<br>
+            3. 验证安装：在命令行运行 <code>python --version</code>
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤2：安装依赖库</strong><br>
+            运行以下命令安装必要的Python库：
+        </div>
+        
+        <div class="code-block">pip install flask
+pip install shapely
+pip install gdal
+pip install numpy
+pip install pillow
+pip install requests</div>
+        
+        <div class="subsection-title">3.2 软件安装</div>
+        
+        <div class="step-box">
+            <strong>步骤1：下载软件包</strong><br>
+            <span class="red-text">【请提供软件包下载地址或安装方式】</span>
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤2：解压软件包</strong><br>
+            将下载的软件包解压到目标目录，例如：<br>
+            <code>C:\ShpToOpenDrive2Obj-Web\</code>（Windows）<br>
+            <code>/opt/ShpToOpenDrive2Obj-Web/</code>（Linux/macOS）
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤3：配置环境变量</strong><br>
+            根据需要配置以下环境变量：<br>
+            • <code>FLASK_APP</code>：指向主应用文件<br>
+            • <code>FLASK_ENV</code>：设置为development或production<br>
+            • <code>UPLOAD_FOLDER</code>：上传文件存储路径<br>
+            • <code>OUTPUT_FOLDER</code>：输出文件存储路径
+        </div>
+        
+        <div class="subsection-title">3.3 服务启动</div>
+        
+        <div class="step-box">
+            <strong>启动Web服务</strong><br>
+            在软件安装目录下运行以下命令：
+        </div>
+        
+        <div class="code-block">cd /path/to/ShpToOpenDrive2Obj-Web
+python web_server.py</div>
+        
+        <div style="margin-left: 20px;">
+            服务启动后，您将看到类似以下的输出：
+        </div>
+        
+        <div class="code-block"> * Running on http://127.0.0.1:5000
+ * Debug mode: off
+ * Press CTRL+C to quit</div>
+        
+        <div class="note">
+            <strong>注意：</strong>默认情况下，服务将在本地5000端口启动。如需修改端口或允许外部访问，请编辑配置文件或使用命令行参数。
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">4. 快速入门</div>
+        
+        <div class="subsection-title">4.1 访问系统</div>
+        
+        <div class="step-box">
+            <strong>步骤1：打开浏览器</strong><br>
+            启动您的Web浏览器（推荐使用Chrome或Firefox）
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤2：访问系统</strong><br>
+            在地址栏输入：<code>http://localhost:5000</code><br>
+            如果服务部署在其他服务器，请使用相应的IP地址和端口
+        </div>
+        
+        <div class="screenshot-placeholder">
+            <span class="red-text">【此处需要插入系统主页截图】</span><br>
+            显示系统主界面，包括导航菜单、功能区域等
+        </div>
+        
+        <div class="subsection-title">4.2 文件上传</div>
+        
+        <div class="step-box">
+            <strong>步骤1：选择上传区域</strong><br>
+            在主页面找到文件上传区域，通常显示为拖拽区域或"选择文件"按钮
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤2：上传Shapefile文件</strong><br>
+            • 方式1：点击"选择文件"按钮，在文件对话框中选择.shp文件<br>
+            • 方式2：直接将.shp文件拖拽到上传区域<br>
+            • 注意：系统会自动检查相关文件（.shx, .dbf, .prj等）
+        </div>
+        
+        <div class="screenshot-placeholder">
+            <span class="red-text">【此处需要插入文件上传界面截图】</span><br>
+            显示文件上传区域、进度条、文件列表等
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤3：验证上传</strong><br>
+            上传完成后，系统会显示：<br>
+            • 文件名和大小<br>
+            • 上传状态（成功/失败）<br>
+            • 文件预览信息（如果可用）
+        </div>
+        
+        <div class="subsection-title">4.3 格式转换</div>
+        
+        <div class="step-box">
+            <strong>步骤1：选择转换选项</strong><br>
+            在文件上传成功后，选择所需的转换选项：<br>
+            • 仅转换为OpenDRIVE格式<br>
+            • 转换为OpenDRIVE并生成OBJ 3D模型<br>
+            • 自定义转换参数
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤2：开始转换</strong><br>
+            点击"开始转换"按钮，系统将开始处理您的文件
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤3：监控进度</strong><br>
+            转换过程中，您可以看到：<br>
+            • 实时进度条<br>
+            • 当前处理阶段<br>
+            • 预计剩余时间<br>
+            • 处理日志（可选）
+        </div>
+        
+        <div class="screenshot-placeholder">
+            <span class="red-text">【此处需要插入转换进度界面截图】</span><br>
+            显示进度条、状态信息、日志输出等
+        </div>
+        
+        <div class="subsection-title">4.4 结果下载</div>
+        
+        <div class="step-box">
+            <strong>步骤1：查看转换结果</strong><br>
+            转换完成后，系统会显示：<br>
+            • 转换状态（成功/失败）<br>
+            • 生成的文件列表<br>
+            • 文件大小和格式信息<br>
+            • 质量检查报告（如果启用）
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤2：预览3D模型（如适用）</strong><br>
+            如果生成了OBJ 3D模型，您可以：<br>
+            • 在浏览器中直接预览3D模型<br>
+            • 旋转、缩放、平移视角<br>
+            • 切换显示模式（线框、实体、纹理）
+        </div>
+        
+        <div class="screenshot-placeholder">
+            <span class="red-text">【此处需要插入3D模型预览截图】</span><br>
+            显示3D模型渲染效果、控制界面等
+        </div>
+        
+        <div class="step-box">
+            <strong>步骤3：下载文件</strong><br>
+            • 单个文件下载：点击文件名旁的下载按钮<br>
+            • 批量下载：选择多个文件后点击"批量下载"<br>
+            • 打包下载：下载包含所有结果文件的ZIP包
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">5. 详细操作说明</div>
+        
+        <div class="subsection-title">5.1 文件管理</div>
+        
+        <div style="margin-left: 20px;">
+            <strong>上传文件管理：</strong><br>
+            • 查看已上传文件列表<br>
+            • 删除不需要的文件<br>
+            • 重新上传替换文件<br>
+            • 文件信息查看（大小、格式、上传时间）
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>输出文件管理：</strong><br>
+            • 浏览转换历史记录<br>
+            • 管理输出文件<br>
+            • 文件版本控制<br>
+            • 存储空间管理
+        </div>
+        
+        <div class="subsection-title">5.2 转换设置</div>
+        
+        <div style="margin-left: 20px;">
+            <strong>基本设置：</strong><br>
+            • 输出格式选择（OpenDRIVE版本）<br>
+            • 坐标系设置<br>
+            • 精度控制参数<br>
+            • 文件命名规则
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>高级设置：</strong><br>
+            • 几何处理参数<br>
+            • 拓扑分析选项<br>
+            • 3D建模参数<br>
+            • 质量控制级别
+        </div>
+        
+        <div class="subsection-title">5.3 3D可视化</div>
+        
+        <div style="margin-left: 20px;">
+            <strong>视角控制：</strong><br>
+            • 鼠标左键：旋转视角<br>
+            • 鼠标右键：平移视图<br>
+            • 滚轮：缩放视图<br>
+            • 双击：重置视角
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>显示选项：</strong><br>
+            • 线框模式：显示模型边框<br>
+            • 实体模式：显示填充表面<br>
+            • 纹理模式：显示材质纹理<br>
+            • 混合模式：组合多种显示效果
+        </div>
+        
+        <div class="subsection-title">5.4 批量处理</div>
+        
+        <div style="margin-left: 20px;">
+            <strong>批量上传：</strong><br>
+            • 选择多个Shapefile文件<br>
+            • 拖拽文件夹进行批量上传<br>
+            • 上传进度监控<br>
+            • 失败文件重试
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>批量转换：</strong><br>
+            • 统一转换参数设置<br>
+            • 并行处理支持<br>
+            • 转换队列管理<br>
+            • 批量结果下载
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">6. 高级功能</div>
+        
+        <div class="subsection-title">6.1 参数配置</div>
+        
+        <div style="margin-left: 20px;">
+            <span class="red-text">【请根据实际功能详细描述参数配置选项】</span><br>
+            • 几何处理参数<br>
+            • 坐标转换设置<br>
+            • 输出格式选项<br>
+            • 性能优化参数
+        </div>
+        
+        <div class="subsection-title">6.2 质量检查</div>
+        
+        <div style="margin-left: 20px;">
+            • 输入数据验证<br>
+            • 转换过程监控<br>
+            • 输出结果检查<br>
+            • 质量报告生成
+        </div>
+        
+        <div class="subsection-title">6.3 历史记录</div>
+        
+        <div style="margin-left: 20px;">
+            • 转换历史查看<br>
+            • 参数设置记录<br>
+            • 结果文件管理<br>
+            • 操作日志查询
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">7. 故障排除</div>
+        
+        <table>
+            <tr>
+                <th>问题</th>
+                <th>可能原因</th>
+                <th>解决方案</th>
+            </tr>
+            <tr>
+                <td>无法访问系统</td>
+                <td>服务未启动或端口被占用</td>
+                <td>检查服务状态，重启服务或更换端口</td>
+            </tr>
+            <tr>
+                <td>文件上传失败</td>
+                <td>文件格式不支持或文件过大</td>
+                <td>检查文件格式，确认文件大小限制</td>
+            </tr>
+            <tr>
+                <td>转换过程中断</td>
+                <td>内存不足或数据错误</td>
+                <td>增加系统内存，检查输入数据质量</td>
+            </tr>
+            <tr>
+                <td>3D预览无法显示</td>
+                <td>浏览器不支持WebGL</td>
+                <td>更新浏览器或启用WebGL支持</td>
+            </tr>
+            <tr>
+                <td>下载文件损坏</td>
+                <td>网络中断或服务器错误</td>
+                <td>重新下载文件，检查网络连接</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">8. 技术规范</div>
+        
+        <div class="subsection-title">8.1 支持的数据格式</div>
+        
+        <div style="margin-left: 20px;">
+            <strong>输入格式：</strong><br>
+            • Shapefile (.shp, .shx, .dbf, .prj, .cpg)<br>
+            • 支持的几何类型：LineString, MultiLineString<br>
+            • 坐标系：WGS84, UTM, 自定义投影
+        </div>
+        
+        <div style="margin-left: 20px;">
+            <strong>输出格式：</strong><br>
+            • OpenDRIVE (.xodr) - 版本1.4, 1.5, 1.6<br>
+            • OBJ 3D模型 (.obj, .mtl)<br>
+            • 质量报告 (.html, .pdf)
+        </div>
+        
+        <div class="subsection-title">8.2 性能指标</div>
+        
+        <div style="margin-left: 20px;">
+            • 最大文件大小：<span class="red-text">【请提供实际限制】</span><br>
+            • 处理速度：<span class="red-text">【请提供性能数据】</span><br>
+            • 并发用户数：<span class="red-text">【请提供并发支持数量】</span><br>
+            • 内存使用：<span class="red-text">【请提供内存使用情况】</span>
+        </div>
+        
+        <div class="subsection-title">8.3 API接口</div>
+        
+        <div style="margin-left: 20px;">
+            <span class="red-text">【如果提供API接口，请详细描述】</span><br>
+            • RESTful API端点<br>
+            • 请求/响应格式<br>
+            • 认证方式<br>
+            • 错误代码说明
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">9. 附录</div>
+        
+        <div class="subsection-title">9.1 常用术语</div>
+        
+        <div style="margin-left: 20px;">
+            • <strong>Shapefile：</strong>ESRI开发的地理信息数据格式<br>
+            • <strong>OpenDRIVE：</strong>自动驾驶道路数据标准格式<br>
+            • <strong>OBJ：</strong>三维模型文件格式<br>
+            • <strong>WebGL：</strong>Web图形库，用于3D渲染
+        </div>
+        
+        <div class="subsection-title">9.2 相关标准</div>
+        
+        <div style="margin-left: 20px;">
+            • OpenDRIVE标准规范<br>
+            • OGC地理信息标准<br>
+            • ISO 14825道路数据标准<br>
+            • W3C Web标准
+        </div>
+        
+        <div class="subsection-title">9.3 技术支持</div>
+        
+        <div style="margin-left: 20px;">
+            • 技术支持邮箱：<span class="red-text">【请提供技术支持联系方式】</span><br>
+            • 用户手册更新：<span class="red-text">【请提供文档更新地址】</span><br>
+            • 问题反馈：<span class="red-text">【请提供问题反馈渠道】</span><br>
+            • 版本更新通知：<span class="red-text">【请提供更新通知方式】</span>
+        </div>
+    </div>
+    
+    <div class="page-footer">第 1 页 共 1 页</div>
+</body>
+</html>

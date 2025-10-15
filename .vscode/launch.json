@@ -7,9 +7,10 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/shp2xodr.py",
             "args": [
-                "${workspaceFolder}/data/test_lane/TestLane.shp",
+                // "${workspaceFolder}/data/testODsample/LaneTest.shp",
+                "${workspaceFolder}/data/test_simple/SimpleTest.shp",
                 "${workspaceFolder}/output/testlane_debug_output.xodr",
-                "--config", "${workspaceFolder}/config/lane_format.json"
+                "--config", "${workspaceFolder}/config/default.json"
             ],
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",

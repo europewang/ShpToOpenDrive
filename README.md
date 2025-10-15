@@ -13,14 +13,14 @@ ShpToOpenDrive 是一个强大的工具，用于将 Shapefile 格式的道路数
 
 - **ShpToOpenDriveConverter**: 主控制器，协调整个转换流程
 - **ShapefileReader**: 数据读取模块，处理shapefile文件和坐标转换
-- **GeometryConverter**: 几何转换模块，将离散点转换为参数化几何
+- **GeometryConverter**: 几何转换模块，将离散点转换为参数化几何，并确保道路连接处的宽度、位置、斜率和航向角一致性。现在，宽度计算通过插值起始和结束宽度来提供更平滑和准确的结果，并且宽度变化计算也通过插值实现。
 - **OpenDriveGenerator**: 文件生成模块，输出标准OpenDRIVE格式
 - **XodrToObjConverter**: 新增的3D模型转换器，将OpenDRIVE文件转换为OBJ格式
 - **XodrParser**: OpenDRIVE文件解析器，支持文件验证和数据提取
 
 详细的转换流程和组件交互请参考：[docs/sequence_diagram.md](docs/sequence_diagram.md)
 
-完整的API文档请参考：[docs/API_Documentation.md](docs/API_Documentation.md)
+完整的API文档请参考：[API.md](API.md)
 
 ## 目录结构
 ```

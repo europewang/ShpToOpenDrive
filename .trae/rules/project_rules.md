@@ -10,4 +10,10 @@ git push origin master
 8.不允许主动提交git，必须我发出了请git上传的命令再上传
 9.测试shp2Opendrive最终代码是调用shp2xodr.py，input是在本项目的\data\testODsample\wh2000\Lane.shp，输出文件是一定要放到output中
 10.测试shp2Opendrive普通测试代码是在本项目的input是E:\Code\ShpToOpenDrive\data\testODsample\LaneTest.shp，输出文件是一定要放到output中
+执行代码方式：python src\shp2xodr.py data\testODsample\LaneTest.shp output\output.xodr
 11.完整的测试流程按照shp2opendrive测试之后，再进行opendrive2obj转换
+执行代码方式：python src\shp2xodr.py data\testODsample\wh2000\Lane.shp output\output.xodr
+12.E:\Code\ShpToOpenDrive\SoftwareCopyright下的所有代码都不要有多余的空行和注释
+13.测试道路斜率一致性问题时候，采用用例：
+python src\shp2xodr.py data\test_simple\SimpleTest.shp output\simple_test.xodr
+使用analyze_slope_consistency.py来看xodr转换的效果怎么样
